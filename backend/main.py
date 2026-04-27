@@ -73,7 +73,7 @@ async def sistem_durum():
     if gemini_var:
         try:
             result = subprocess.run(
-                [gemini_yol, "-p", "1+1=?"],
+                [gemini_yol, "-p", "1+1=?", "--skip-trust", "--yolo"],
                 capture_output=True, text=True, timeout=30,
                 env={**os.environ, "GEMINI_CLI_TRUST_WORKSPACE": "true"},
             )
@@ -85,7 +85,7 @@ async def sistem_durum():
     if settings_yol.exists():
         try:
             s = json.loads(settings_yol.read_text(encoding="utf-8"))
-            yargi_mcp = "yargi_mcp" in s.get("mcpServers", {})
+            yargi_mcp = "yargi-mcp" in s.get("mcpServers", {}) or "yargi_mcp" in s.get("mcpServers", {})
         except Exception:
             pass
     return {
