@@ -189,12 +189,12 @@ def sohbet_kaydet(dava_id: str, rol: str, icerik: str):
         )
 
 
-def sohbet_getir(dava_id: str, limit: int = 50) -> list:
+def sohbet_getir(dava_id: str) -> list:
     with baglan() as c:
         rows = c.execute(
             "SELECT rol, icerik, tarih FROM sohbet_gecmisi "
-            "WHERE dava_id=? ORDER BY tarih ASC LIMIT ?",
-            (dava_id, limit),
+            "WHERE dava_id=? ORDER BY tarih ASC",
+            (dava_id,),
         ).fetchall()
     return [dict(r) for r in rows]
 

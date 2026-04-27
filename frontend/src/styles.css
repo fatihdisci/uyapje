@@ -225,6 +225,26 @@ input, textarea, button { font-family: inherit; }
 .file-pill.baglamda-aktif .baglamda-toggle { color: var(--green); }
 .baglamda-toggle:hover { color: var(--text); }
 
+/* Message timestamp */
+.msg-time {
+  font-size: 10px;
+  margin-top: 5px;
+  text-align: right;
+  opacity: 0.55;
+}
+.msg.user .msg-time { color: rgba(0,0,0,0.6); }
+.msg.assistant .msg-time { color: var(--muted); }
+
+/* Date separator */
+.date-sep {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--muted); font-size: 11px;
+  margin: 6px 0; user-select: none;
+}
+.date-sep::before, .date-sep::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
 /* Empty state */
 .empty {
   flex: 1; display: grid; place-items: center; padding: 40px;

@@ -3,6 +3,21 @@ import ReactMarkdown from 'react-markdown'
 import { api } from '../api.js'
 import FileStrip from './FileStrip.jsx'
 
+const tarihBaslik = (tarih) => {
+  if (!tarih) return null
+  const d = new Date(tarih)
+  const bugun = new Date()
+  const dun = new Date(bugun - 86400000)
+  if (d.toDateString() === bugun.toDateString()) return 'Bugün'
+  if (d.toDateString() === dun.toDateString()) return 'Dün'
+  return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+const saatFormat = (tarih) => {
+  if (!tarih) return ''
+  return new Date(tarih).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+}
+
 export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
   const [mesajlar, setMesajlar] = useState([])
   const [dosyalar, setDosyalar] = useState([])
@@ -17,7 +32,7 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
       api.sohbetGecmisi(dava.id),
       api.dosyalar(dava.id),
     ])
-    setMesajlar(g.map(m => ({ rol: m.rol, icerik: m.icerik })))
+    setMesajlar(g.map(m => ({ rol: m.rol, icerik: m.icerik, tarih: m.tarih })))
     setDosyalar(d)
   }
 
@@ -30,13 +45,14 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
   const gonder = async () => {
     const soru = taslak.trim()
     if (!soru || bekleniyor) return
-    setMesajlar(m => [...m, { rol: 'user', icerik: soru }])
+    const simdi = new Date().toISOString()
+    setMesajlar(m => [...m, { rol: 'user', icerik: soru, tarih: simdi }])
     setTaslak("")
     setBekleniyor(true)
     setBekMesaj("Gemini yanıtlıyor...")
     try {
       const { yanit } = await api.sohbet(dava.id, soru)
-      setMesajlar(m => [...m, { rol: 'assistant', icerik: yanit }])
+      setMesajlar(m => [...m, { rol: 'assistant', icerik: yanit, tarih: new Date().toISOString() }])
     } catch (err) {
       onToast(`Hata: ${err.message}`, 'err')
     } finally {
@@ -54,7 +70,8 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
       if (!tarih) return
     }
 
-    setMesajlar(m => [...m, { rol: 'user', icerik: `[${baslik} istendi]` }])
+    const simdi = new Date().toISOString()
+    setMesajlar(m => [...m, { rol: 'user', icerik: `[${baslik} istendi]`, tarih: simdi }])
     setBekleniyor(true)
     setBekMesaj(tur === 'ictihat'
       ? "Yargıtay kararları araştırılıyor (30sn'ye kadar sürebilir)..."
@@ -65,7 +82,7 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
       else if (tur === 'risk') yanit = (await api.risk(dava.id)).yanit
       else if (tur === 'durusma') yanit = (await api.durusma(dava.id, tarih)).yanit
       else if (tur === 'ictihat') yanit = (await api.ictihat(dava.id, null)).yanit
-      setMesajlar(m => [...m, { rol: 'assistant', icerik: yanit, ictihat: tur === 'ictihat' }])
+      setMesajlar(m => [...m, { rol: 'assistant', icerik: yanit, tarih: new Date().toISOString(), ictihat: tur === 'ictihat' }])
     } catch (err) {
       onToast(`Hata: ${err.message}`, 'err')
     } finally {
@@ -110,13 +127,26 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
               : 'Hazır. Davanız hakkında soru sorabilir veya yukarıdaki hızlı eylemlerden birini seçebilirsiniz.'}
           </div>
         )}
-        {mesajlar.map((m, i) => (
-          <div key={i} className={`msg ${m.rol === 'user' ? 'user' : 'assistant'} ${m.ictihat ? 'ictihat' : ''}`}>
-            {m.rol === 'user'
-              ? <div style={{ whiteSpace: 'pre-wrap' }}>{m.icerik}</div>
-              : <ReactMarkdown>{m.icerik}</ReactMarkdown>}
-          </div>
-        ))}
+        {mesajlar.map((m, i) => {
+          const onceki = mesajlar[i - 1]
+          const tarihDegisti = m.tarih && (
+            !onceki?.tarih ||
+            new Date(m.tarih).toDateString() !== new Date(onceki.tarih).toDateString()
+          )
+          return (
+            <React.Fragment key={i}>
+              {tarihDegisti && (
+                <div className="date-sep">{tarihBaslik(m.tarih)}</div>
+              )}
+              <div className={`msg ${m.rol === 'user' ? 'user' : 'assistant'} ${m.ictihat ? 'ictihat' : ''}`}>
+                {m.rol === 'user'
+                  ? <div style={{ whiteSpace: 'pre-wrap' }}>{m.icerik}</div>
+                  : <ReactMarkdown>{m.icerik}</ReactMarkdown>}
+                {m.tarih && <div className="msg-time">{saatFormat(m.tarih)}</div>}
+              </div>
+            </React.Fragment>
+          )
+        })}
         {bekleniyor && (
           <div className="loading-msg">
             <span className="spinner" />
@@ -135,7 +165,7 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
         />
         <div className="composer-actions">
           <span className="composer-hint">
-            {dosyalar.length > 0 ? `${dosyalar.length} dosya bağlam olarak kullanılıyor` : 'Dosya yüklemediniz — yanıtlar sınırlı olacak'}
+            {dosyalar.length > 0 ? `${dosyalar.filter(d => d.baglamda).length} / ${dosyalar.length} dosya bağlamda` : 'Dosya yüklemediniz — yanıtlar sınırlı olacak'}
           </span>
           <button className="btn sm" onClick={gonder} disabled={bekleniyor || !taslak.trim()}>
             Gönder

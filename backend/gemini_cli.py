@@ -86,11 +86,21 @@ def get_sistem_promptu(taraf: str = None) -> str:
     return p
 
 
+def _gecmis_formatla(gecmis: list, max_karakter: int = 20000) -> str:
+    """En yeni mesajlardan geriye doğru max_karakter sığana kadar geçmişi alır."""
+    satirlar = []
+    toplam = 0
+    for m in reversed(gecmis):
+        satir = f"{'Avukat' if m['rol']=='user' else 'Asistan'}: {m['icerik']}"
+        if toplam + len(satir) + 1 > max_karakter:
+            break
+        satirlar.append(satir)
+        toplam += len(satir) + 1
+    return "\n".join(reversed(satirlar))
+
+
 async def sohbet(dava_metni: str, soru: str, gecmis: list, taraf: str = None) -> str:
-    gecmis_str = "\n".join(
-        f"{'Avukat' if m['rol']=='user' else 'Asistan'}: {m['icerik']}"
-        for m in gecmis[-6:]
-    )
+    gecmis_str = _gecmis_formatla(gecmis)
     prompt = f"""{get_sistem_promptu(taraf)}
 
 DAVA DOSYASI:

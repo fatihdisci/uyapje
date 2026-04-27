@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar.jsx'
 import ChatPanel from './components/ChatPanel.jsx'
 import IctihatPanel from './components/IctihatPanel.jsx'
@@ -11,6 +11,7 @@ export default function App() {
   const [sistem, setSistem] = useState(null)
   const [ictihatAcik, setIctihatAcik] = useState(false)
   const [toastlar, setToastlar] = useState([])
+  const ilkYuklemeRef = useRef(true)
 
   const toast = (mesaj, tip = 'info') => {
     const id = Date.now() + Math.random()
@@ -42,15 +43,29 @@ export default function App() {
       ])
       setDavalar(d)
       setYarinki(y)
+      if (ilkYuklemeRef.current) {
+        ilkYuklemeRef.current = false
+        const sonId = localStorage.getItem('sonDavaId')
+        if (sonId) {
+          const bulunan = d.find(x => x.id === sonId)
+          if (bulunan) setAktifDava(bulunan)
+        }
+      }
     } catch (err) {
       toast(`Backend bağlantı hatası: ${err.message}`, 'err')
     }
   }
 
-  useEffect(() => { 
+  useEffect(() => {
     yukleDavalar()
     yukleSistem()
   }, [])
+
+  useEffect(() => {
+    if (aktifDava?.id) {
+      localStorage.setItem('sonDavaId', aktifDava.id)
+    }
+  }, [aktifDava?.id])
 
   const yeniDava = async (d) => {
     try {
@@ -67,7 +82,10 @@ export default function App() {
     if (!window.confirm(`Dava #${id} tamamen silinecek, emin misiniz?`)) return
     try {
       await api.davaSil(id)
-      if (aktifDava?.id === id) setAktifDava(null)
+      if (aktifDava?.id === id) {
+        setAktifDava(null)
+        localStorage.removeItem('sonDavaId')
+      }
       await yukleDavalar()
       toast(`Dava silindi (#${id})`, 'info')
     } catch (err) {
