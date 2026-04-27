@@ -28,6 +28,8 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
 
   const yukleDurumu = async () => {
     if (!dava) return
+    setMesajlar([])
+    setDosyalar([])
     const [g, d] = await Promise.all([
       api.sohbetGecmisi(dava.id),
       api.dosyalar(dava.id),

@@ -19,7 +19,10 @@ except (ValueError, TypeError):
 
 # Gemini 1.5/2.0 context window ~1M token ≈ 3-4M karakter.
 # 500k karakter ≈ 125k token, yeterince büyük ve güvenli.
-MAX_METIN = int(os.getenv("GEMINI_MAX_METIN", "500000"))
+try:
+    MAX_METIN = int(os.getenv("GEMINI_MAX_METIN", "500000"))
+except (ValueError, TypeError):
+    MAX_METIN = 500000
 
 
 def gemini_kurulu_mu() -> bool:

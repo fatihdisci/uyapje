@@ -145,6 +145,7 @@ def dava_guncelle(dava_id: str, istek: DavaGuncelleIstek):
 @app.delete("/api/dava/{dava_id}")
 def dava_sil(dava_id: str):
     db.dava_sil(dava_id)
+    _cache_temizle(dava_id)
     return {"ok": True}
 
 
@@ -249,11 +250,14 @@ async def durusma(dava_id: str, istek: DurusmaIstek):
     dava = db.dava_getir(dava_id)
     metin = _dava_metni(dava_id)
     try:
-        return {"yanit": await gc.durusma_hazirligi(metin, istek.tarih, taraf=dava.get("taraf") if dava else None)}
+        yanit = await gc.durusma_hazirligi(metin, istek.tarih, taraf=dava.get("taraf") if dava else None)
     except Exception as e:
         print(f"[DURUŞMA HATASI] {type(e).__name__}: {e}")
         traceback.print_exc()
         raise HTTPException(500, str(e) or repr(e))
+    db.sohbet_kaydet(dava_id, "user", f"[Duruşma hazırlığı istendi — {istek.tarih}]")
+    db.sohbet_kaydet(dava_id, "assistant", yanit)
+    return {"yanit": yanit}
 
 
 @app.get("/api/dava/{dava_id}/ozet")
@@ -261,11 +265,14 @@ async def ozet(dava_id: str):
     dava = db.dava_getir(dava_id)
     metin = _dava_metni(dava_id)
     try:
-        return {"yanit": await gc.dava_ozeti(metin, taraf=dava.get("taraf") if dava else None)}
+        yanit = await gc.dava_ozeti(metin, taraf=dava.get("taraf") if dava else None)
     except Exception as e:
         print(f"[ÖZET HATASI] {type(e).__name__}: {e}")
         traceback.print_exc()
         raise HTTPException(500, str(e) or repr(e))
+    db.sohbet_kaydet(dava_id, "user", "[Dava özeti istendi]")
+    db.sohbet_kaydet(dava_id, "assistant", yanit)
+    return {"yanit": yanit}
 
 
 @app.get("/api/dava/{dava_id}/risk")
@@ -273,11 +280,14 @@ async def risk(dava_id: str):
     dava = db.dava_getir(dava_id)
     metin = _dava_metni(dava_id)
     try:
-        return {"yanit": await gc.risk_analizi(metin, taraf=dava.get("taraf") if dava else None)}
+        yanit = await gc.risk_analizi(metin, taraf=dava.get("taraf") if dava else None)
     except Exception as e:
         print(f"[RİSK HATASI] {type(e).__name__}: {e}")
         traceback.print_exc()
         raise HTTPException(500, str(e) or repr(e))
+    db.sohbet_kaydet(dava_id, "user", "[Risk analizi istendi]")
+    db.sohbet_kaydet(dava_id, "assistant", yanit)
+    return {"yanit": yanit}
 
 
 @app.post("/api/dava/{dava_id}/ictihat")
@@ -293,4 +303,7 @@ async def ictihat(dava_id: str, istek: IctihatIstek):
         traceback.print_exc()
         raise HTTPException(500, str(e) or repr(e))
     db.ictihat_cache_yaz(dava_id, istek.sorgu or "(otomatik)", sonuc)
+    etiket = f"[İçtihat araştırması — {istek.sorgu}]" if istek.sorgu else "[İçtihat araştırması istendi]"
+    db.sohbet_kaydet(dava_id, "user", etiket)
+    db.sohbet_kaydet(dava_id, "assistant", sonuc)
     return {"yanit": sonuc}
