@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+dist/
+*.db
+.env
+.env.local
+.DS_Store
+.vscode/
+.claude/
