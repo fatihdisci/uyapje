@@ -23,7 +23,16 @@ load_dotenv()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    db.migrate()
     yield
+
+
+# dava_id → {"ids": frozenset[int], "metin": str}
+_metin_cache: dict = {}
+
+
+def _cache_temizle(dava_id: str):
+    _metin_cache.pop(dava_id, None)
 
 
 app = FastAPI(title="UYAP Hukuk Asistanı", lifespan=lifespan)
@@ -37,6 +46,10 @@ app.add_middleware(
 
 
 # ========== Modeller ==========
+
+class BaglamdaIstek(BaseModel):
+    baglamda: int  # 0 veya 1
+
 
 class DavaIstek(BaseModel):
     mahkeme: str
@@ -164,6 +177,7 @@ async def dosya_yukle(dava_id: str, file: UploadFile = File(...)):
         dava_id, file.filename or "dosya", ext,
         sonuc["metin"], sonuc.get("meta", {}),
     )
+    _cache_temizle(dava_id)
     return {"id": yeni_id, "uzunluk": len(sonuc["metin"])}
 
 
@@ -174,16 +188,38 @@ def dosyalari_listele(dava_id: str):
 
 @app.delete("/api/dosya/{dosya_id}")
 def dosya_sil(dosya_id: int):
+    dava_id = db.dosyanin_dava_id(dosya_id)
     db.dosya_sil(dosya_id)
+    if dava_id:
+        _cache_temizle(dava_id)
+    return {"ok": True}
+
+
+@app.patch("/api/dosya/{dosya_id}/baglamda")
+def dosya_baglamda(dosya_id: int, istek: BaglamdaIstek):
+    dava_id = db.dosyanin_dava_id(dosya_id)
+    db.dosya_baglamda_guncelle(dosya_id, istek.baglamda)
+    if dava_id:
+        _cache_temizle(dava_id)
     return {"ok": True}
 
 
 # ========== AI Endpointleri ==========
 
 def _dava_metni(dava_id: str) -> str:
+    secili_ids = db.baglamda_idleri(dava_id)
+    if not secili_ids:
+        raise HTTPException(
+            400,
+            "Bağlama eklenmiş dosya yok. Dosya listesindeki "
+            "geçiş düğmesinden en az bir dosyayı seçin."
+        )
+    anahtar = frozenset(secili_ids)
+    cached = _metin_cache.get(dava_id)
+    if cached and cached["ids"] == anahtar:
+        return cached["metin"]
     metin = db.dosyalari_metin_birlestir(dava_id)
-    if not metin:
-        raise HTTPException(400, "Bu davaya henüz dosya yüklenmemiş.")
+    _metin_cache[dava_id] = {"ids": anahtar, "metin": metin}
     return metin
 
 

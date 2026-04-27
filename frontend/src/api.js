@@ -32,6 +32,7 @@ export const api = {
     return r.json()
   },
   dosyaSil: (dosyaId) => istek(`/dosya/${dosyaId}`, { method: "DELETE" }),
+  dosyaBaglamda: (dosyaId, baglamda) => istek(`/dosya/${dosyaId}/baglamda`, { method: "PATCH", body: JSON.stringify({ baglamda }) }),
   sohbetGecmisi: (id) => istek(`/dava/${id}/sohbet`),
   sohbet: (id, soru) => istek(`/dava/${id}/sohbet`, { method: "POST", body: JSON.stringify({ soru }) }),
   durusma: (id, tarih) => istek(`/dava/${id}/durusma`, { method: "POST", body: JSON.stringify({ tarih }) }),

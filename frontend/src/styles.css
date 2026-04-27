@@ -211,9 +211,19 @@ input, textarea, button { font-family: inherit; }
   border-radius: 14px;
   font-size: 11px; white-space: nowrap;
   display: flex; align-items: center; gap: 6px;
+  transition: border-color 0.15s, opacity 0.15s;
 }
+.file-pill.baglamda-aktif { border-color: rgba(76, 175, 80, 0.5); }
+.file-pill.baglamda-pasif { opacity: 0.5; }
+.file-pill.baglamda-pasif:hover { opacity: 0.8; }
 .file-pill .x { color: var(--muted); cursor: pointer; }
 .file-pill .x:hover { color: var(--red); }
+.baglamda-toggle {
+  cursor: pointer; color: var(--muted); font-size: 10px; line-height: 1;
+  user-select: none;
+}
+.file-pill.baglamda-aktif .baglamda-toggle { color: var(--green); }
+.baglamda-toggle:hover { color: var(--text); }
 
 /* Empty state */
 .empty {
