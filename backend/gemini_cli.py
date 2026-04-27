@@ -9,6 +9,7 @@ from promptlar import (
     OZET_PROMPTU,
     RISK_PROMPTU,
     SISTEM_PROMPTU,
+    TARAF_BILGISI,
 )
 
 TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "180"))
@@ -71,12 +72,19 @@ async def gemini_calistir(prompt: str) -> str:
     return await asyncio.to_thread(_gemini_sync, prompt)
 
 
-async def sohbet(dava_metni: str, soru: str, gecmis: list) -> str:
+def get_sistem_promptu(taraf: str = None) -> str:
+    p = SISTEM_PROMPTU
+    if taraf:
+        p += "\n" + TARAF_BILGISI.format(taraf=taraf)
+    return p
+
+
+async def sohbet(dava_metni: str, soru: str, gecmis: list, taraf: str = None) -> str:
     gecmis_str = "\n".join(
         f"{'Avukat' if m['rol']=='user' else 'Asistan'}: {m['icerik']}"
         for m in gecmis[-6:]
     )
-    prompt = f"""{SISTEM_PROMPTU}
+    prompt = f"""{get_sistem_promptu(taraf)}
 
 DAVA DOSYASI:
 {dava_metni[:50000]}
@@ -90,24 +98,24 @@ YANIT:"""
     return await gemini_calistir(prompt)
 
 
-async def durusma_hazirligi(dava_metni: str, tarih: str) -> str:
-    prompt = SISTEM_PROMPTU + "\n\n" + DURUSMA_PROMPTU.format(
+async def durusma_hazirligi(dava_metni: str, tarih: str, taraf: str = None) -> str:
+    prompt = get_sistem_promptu(taraf) + "\n\n" + DURUSMA_PROMPTU.format(
         dava_metni=dava_metni[:50000], tarih=tarih
     )
     return await gemini_calistir(prompt)
 
 
-async def dava_ozeti(dava_metni: str) -> str:
-    prompt = SISTEM_PROMPTU + "\n\n" + OZET_PROMPTU.format(dava_metni=dava_metni[:50000])
+async def dava_ozeti(dava_metni: str, taraf: str = None) -> str:
+    prompt = get_sistem_promptu(taraf) + "\n\n" + OZET_PROMPTU.format(dava_metni=dava_metni[:50000])
     return await gemini_calistir(prompt)
 
 
-async def risk_analizi(dava_metni: str) -> str:
-    prompt = SISTEM_PROMPTU + "\n\n" + RISK_PROMPTU.format(dava_metni=dava_metni[:50000])
+async def risk_analizi(dava_metni: str, taraf: str = None) -> str:
+    prompt = get_sistem_promptu(taraf) + "\n\n" + RISK_PROMPTU.format(dava_metni=dava_metni[:50000])
     return await gemini_calistir(prompt)
 
 
-async def ictihat_arastir(dava_metni: str = None, ozel_sorgu: str = None) -> str:
+async def ictihat_arastir(dava_metni: str = None, ozel_sorgu: str = None, taraf: str = None) -> str:
     """Yargı MCP tool'ları Gemini settings.json'da kayıtlıysa otomatik çağrılır."""
     if ozel_sorgu:
         prompt = (
@@ -119,7 +127,7 @@ async def ictihat_arastir(dava_metni: str = None, ozel_sorgu: str = None) -> str
             "Yanıtı sade ve hukuki bir Türkçe ile ver."
         )
     else:
-        prompt = f"""{SISTEM_PROMPTU}
+        prompt = f"""{get_sistem_promptu(taraf)}
 
 Aşağıdaki dava dosyasını analiz et. Yargı MCP araçlarını kullanarak:
 1. Davadaki temel hukuki konulara dair Yargıtay/Danıştay kararlarını araştır.

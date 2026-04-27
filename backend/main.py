@@ -186,11 +186,12 @@ def _dava_metni(dava_id: str) -> str:
 
 @app.post("/api/dava/{dava_id}/sohbet")
 async def sohbet(dava_id: str, istek: SohbetIstek):
+    dava = db.dava_getir(dava_id)
     metin = _dava_metni(dava_id)
     gecmis = db.sohbet_getir(dava_id)
     db.sohbet_kaydet(dava_id, "user", istek.soru)
     try:
-        yanit = await gc.sohbet(metin, istek.soru, gecmis)
+        yanit = await gc.sohbet(metin, istek.soru, gecmis, taraf=dava.get("taraf") if dava else None)
     except Exception as e:
         print(f"[SOHBET HATASI] {type(e).__name__}: {e}")
         traceback.print_exc()
@@ -206,9 +207,10 @@ def sohbet_gecmisi(dava_id: str):
 
 @app.post("/api/dava/{dava_id}/durusma")
 async def durusma(dava_id: str, istek: DurusmaIstek):
+    dava = db.dava_getir(dava_id)
     metin = _dava_metni(dava_id)
     try:
-        return {"yanit": await gc.durusma_hazirligi(metin, istek.tarih)}
+        return {"yanit": await gc.durusma_hazirligi(metin, istek.tarih, taraf=dava.get("taraf") if dava else None)}
     except Exception as e:
         print(f"[DURUŞMA HATASI] {type(e).__name__}: {e}")
         traceback.print_exc()
@@ -217,9 +219,10 @@ async def durusma(dava_id: str, istek: DurusmaIstek):
 
 @app.get("/api/dava/{dava_id}/ozet")
 async def ozet(dava_id: str):
+    dava = db.dava_getir(dava_id)
     metin = _dava_metni(dava_id)
     try:
-        return {"yanit": await gc.dava_ozeti(metin)}
+        return {"yanit": await gc.dava_ozeti(metin, taraf=dava.get("taraf") if dava else None)}
     except Exception as e:
         print(f"[ÖZET HATASI] {type(e).__name__}: {e}")
         traceback.print_exc()
@@ -228,9 +231,10 @@ async def ozet(dava_id: str):
 
 @app.get("/api/dava/{dava_id}/risk")
 async def risk(dava_id: str):
+    dava = db.dava_getir(dava_id)
     metin = _dava_metni(dava_id)
     try:
-        return {"yanit": await gc.risk_analizi(metin)}
+        return {"yanit": await gc.risk_analizi(metin, taraf=dava.get("taraf") if dava else None)}
     except Exception as e:
         print(f"[RİSK HATASI] {type(e).__name__}: {e}")
         traceback.print_exc()
@@ -239,11 +243,12 @@ async def risk(dava_id: str):
 
 @app.post("/api/dava/{dava_id}/ictihat")
 async def ictihat(dava_id: str, istek: IctihatIstek):
+    dava = db.dava_getir(dava_id)
     metin = None
     if not istek.sorgu:
         metin = _dava_metni(dava_id)
     try:
-        sonuc = await gc.ictihat_arastir(dava_metni=metin, ozel_sorgu=istek.sorgu)
+        sonuc = await gc.ictihat_arastir(dava_metni=metin, ozel_sorgu=istek.sorgu, taraf=dava.get("taraf") if dava else None)
     except Exception as e:
         print(f"[İÇTİHAT HATASI] {type(e).__name__}: {e}")
         traceback.print_exc()

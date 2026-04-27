@@ -103,6 +103,9 @@ def dava_guncelle(dava_id: str, **alanlar):
 
 def dava_sil(dava_id: str):
     with baglan() as c:
+        c.execute("DELETE FROM dosyalar WHERE dava_id=?", (dava_id,))
+        c.execute("DELETE FROM sohbet_gecmisi WHERE dava_id=?", (dava_id,))
+        c.execute("DELETE FROM ictihat_cache WHERE dava_id=?", (dava_id,))
         c.execute("DELETE FROM davalar WHERE id=?", (dava_id,))
 
 

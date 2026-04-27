@@ -89,6 +89,19 @@ export default function Sidebar({ davalar, aktifDava, secim, yarinki, sistem, on
               <input value={form.konu} onChange={e => setForm({...form, konu: e.target.value})}
                 placeholder="örn. 2024/123 Esas" />
             </div>
+            <div className="field">
+              <label>Müvekkil Sıfatı (Hangi tarafız?)</label>
+              <select value={form.taraf || ""} onChange={e => setForm({...form, taraf: e.target.value})}>
+                <option value="">Belirtilmedi</option>
+                <option value="Davacı">Davacı</option>
+                <option value="Davalı">Davalı</option>
+                <option value="Sanık">Sanık</option>
+                <option value="Müşteki / Katılan">Müşteki / Katılan</option>
+                <option value="Alacaklı">Alacaklı</option>
+                <option value="Borçlu">Borçlu</option>
+                <option value="Şüpheli">Şüpheli</option>
+              </select>
+            </div>
             <div className="modal-actions">
               <button className="btn ghost sm" onClick={() => setYeniAcik(false)}>İptal</button>
               <button className="btn sm" onClick={kaydet}>Kaydet</button>
