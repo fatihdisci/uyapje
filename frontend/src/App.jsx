@@ -53,6 +53,18 @@ export default function App() {
     }
   }
 
+  const davaSil = async (id) => {
+    if (!window.confirm(`Dava #${id} tamamen silinecek, emin misiniz?`)) return
+    try {
+      await api.davaSil(id)
+      if (aktifDava?.id === id) setAktifDava(null)
+      await yukle()
+      toast(`Dava silindi (#${id})`, 'info')
+    } catch (err) {
+      toast(`Silme hatası: ${err.message}`, 'err')
+    }
+  }
+
   return (
     <div className={`app ${ictihatAcik && aktifDava ? 'with-ictihat' : ''}`}>
       <Sidebar
@@ -63,6 +75,7 @@ export default function App() {
         sistem={sistem}
         onYeniDava={yeniDava}
         onYenile={yukle}
+        onDavaSil={davaSil}
       />
 
       {aktifDava ? (

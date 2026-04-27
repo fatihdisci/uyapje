@@ -22,7 +22,8 @@ export default function FileStrip({ davaId, dosyalar, onYenile, onToast }) {
     onYenile()
   }
 
-  const sil = async (id) => {
+  const sil = async (id, ad) => {
+    if (!window.confirm(`"${ad}" dosyasını silmek istediğinize emin misiniz?`)) return
     await api.dosyaSil(id)
     onYenile()
   }
@@ -38,7 +39,7 @@ export default function FileStrip({ davaId, dosyalar, onYenile, onToast }) {
       {dosyalar.map(d => (
         <span key={d.id} className="file-pill">
           📄 {d.dosya_adi}
-          <span className="x" onClick={() => sil(d.id)}>✕</span>
+          <span className="x" onClick={() => sil(d.id, d.dosya_adi)}>✕</span>
         </span>
       ))}
       {dosyalar.length === 0 && !yukleniyor && (

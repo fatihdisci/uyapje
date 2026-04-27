@@ -103,6 +103,9 @@ input, textarea, button { font-family: inherit; }
 .badge.aktif { color: var(--green); border-color: rgba(76, 175, 80, 0.4); }
 .dava-tarih { font-size: 11px; color: var(--muted); margin-left: auto; }
 
+.x-btn { color: var(--muted); cursor: pointer; padding: 2px; }
+.x-btn:hover { color: var(--red); }
+
 .sidebar-actions { padding: 10px; border-top: 1px solid var(--border); }
 .btn {
   width: 100%; padding: 9px 12px;
@@ -270,4 +273,15 @@ input, textarea, button { font-family: inherit; }
   padding: 7px 10px; color: var(--text); outline: none; font-size: 12px;
 }
 .ictihat-result { flex: 1; overflow-y: auto; padding: 14px; font-size: 13px; line-height: 1.55; }
-.ictihat-result h2, .ictihat-result h3 { color: var(--purple); margin: 8px 0 4px; }
+.ictihat-result h2, .ictihat-result h3 { color: var(--purple); margin: 12px 0 6px; }
+.ictihat-result p { margin-bottom: 10px; }
+.ictihat-result ul, .ictihat-result ol { padding-left: 20px; margin-bottom: 10px; }
+.ictihat-result li { margin-bottom: 6px; }
+.ictihat-result strong { color: var(--gold); }
+.ictihat-result blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 10px;
+  color: var(--muted);
+  font-style: italic;
+  margin: 10px 0;
+}

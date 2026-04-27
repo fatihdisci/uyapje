@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-export default function Sidebar({ davalar, aktifDava, secim, yarinki, sistem, onYeniDava, onYenile }) {
+export default function Sidebar({ davalar, aktifDava, secim, yarinki, sistem, onYeniDava, onYenile, onDavaSil }) {
   const [yeniAcik, setYeniAcik] = useState(false)
   const [form, setForm] = useState({ mahkeme: "", konu: "", taraf: "", sonraki_durusma: "" })
 
@@ -44,7 +44,10 @@ export default function Sidebar({ davalar, aktifDava, secim, yarinki, sistem, on
             className={`dava-card ${aktifDava?.id === d.id ? 'active' : ''}`}
             onClick={() => secim(d)}
           >
-            <div className="dava-card-no">#{d.id}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="dava-card-no">#{d.id}</div>
+              <span className="x-btn" title="Davayı sil" onClick={(e) => { e.stopPropagation(); onDavaSil(d.id); }}>✕</span>
+            </div>
             <div className="dava-card-mahkeme">{d.mahkeme}</div>
             <div className="dava-card-konu">{d.konu}</div>
             <div className="dava-card-meta">

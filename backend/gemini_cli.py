@@ -111,17 +111,20 @@ async def ictihat_arastir(dava_metni: str = None, ozel_sorgu: str = None) -> str
     """Yargı MCP tool'ları Gemini settings.json'da kayıtlıysa otomatik çağrılır."""
     if ozel_sorgu:
         prompt = (
-            f"Yargı MCP araçlarını kullanarak şu konuyu araştır: {ozel_sorgu}\n"
-            "Bulduğun kararları karar numarası, daire ve tarihiyle listele. "
-            "Türkçe yanıt ver."
+            f"Yargı MCP araçlarını kullanarak şu konuyu detaylıca araştır: {ozel_sorgu}\n"
+            "Bulduğun kararları Markdown formatında, okunaklı bir şekilde listele:\n"
+            "- Karar numarası ve tarihini belirgin (**kalın**) yaz.\n"
+            "- İlgili daireyi ve mahkemeyi belirt.\n"
+            "- Kararın özetini veya ilgili kısmını madde imleriyle yaz.\n"
+            "Yanıtı sade ve hukuki bir Türkçe ile ver."
         )
     else:
         prompt = f"""{SISTEM_PROMPTU}
 
 Aşağıdaki dava dosyasını analiz et. Yargı MCP araçlarını kullanarak:
-1. Davadaki temel hukuki konulara dair Yargıtay/Danıştay kararlarını ara
-2. Kararları numara ve tarihiyle listele
-3. Bu kararların davayla ilişkisini açıkla
+1. Davadaki temel hukuki konulara dair Yargıtay/Danıştay kararlarını araştır.
+2. Kararları Markdown formatında düzenli bir şekilde listele (Karar numarası, tarihi, dairesi ve özet bilgisini içersin).
+3. Bu kararların davayla ilişkisini net bir şekilde açıkla.
 
 DAVA:
 {(dava_metni or '')[:20000]}"""
