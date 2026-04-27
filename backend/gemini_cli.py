@@ -17,6 +17,10 @@ try:
 except (ValueError, TypeError):
     TIMEOUT = 180
 
+# Gemini 1.5/2.0 context window ~1M token ≈ 3-4M karakter.
+# 500k karakter ≈ 125k token, yeterince büyük ve güvenli.
+MAX_METIN = int(os.getenv("GEMINI_MAX_METIN", "500000"))
+
 
 def gemini_kurulu_mu() -> bool:
     return shutil.which("gemini") is not None
@@ -90,7 +94,7 @@ async def sohbet(dava_metni: str, soru: str, gecmis: list, taraf: str = None) ->
     prompt = f"""{get_sistem_promptu(taraf)}
 
 DAVA DOSYASI:
-{dava_metni[:50000]}
+{dava_metni[:MAX_METIN]}
 
 SOHBET GEÇMİŞİ:
 {gecmis_str}
@@ -103,18 +107,18 @@ YANIT:"""
 
 async def durusma_hazirligi(dava_metni: str, tarih: str, taraf: str = None) -> str:
     prompt = get_sistem_promptu(taraf) + "\n\n" + DURUSMA_PROMPTU.format(
-        dava_metni=dava_metni[:50000], tarih=tarih
+        dava_metni=dava_metni[:MAX_METIN], tarih=tarih
     )
     return await gemini_calistir(prompt)
 
 
 async def dava_ozeti(dava_metni: str, taraf: str = None) -> str:
-    prompt = get_sistem_promptu(taraf) + "\n\n" + OZET_PROMPTU.format(dava_metni=dava_metni[:50000])
+    prompt = get_sistem_promptu(taraf) + "\n\n" + OZET_PROMPTU.format(dava_metni=dava_metni[:MAX_METIN])
     return await gemini_calistir(prompt)
 
 
 async def risk_analizi(dava_metni: str, taraf: str = None) -> str:
-    prompt = get_sistem_promptu(taraf) + "\n\n" + RISK_PROMPTU.format(dava_metni=dava_metni[:50000])
+    prompt = get_sistem_promptu(taraf) + "\n\n" + RISK_PROMPTU.format(dava_metni=dava_metni[:MAX_METIN])
     return await gemini_calistir(prompt)
 
 
@@ -138,5 +142,5 @@ Aşağıdaki dava dosyasını analiz et. Yargı MCP araçlarını kullanarak:
 3. Bu kararların davayla ilişkisini net bir şekilde açıkla.
 
 DAVA:
-{(dava_metni or '')[:20000]}"""
+{(dava_metni or '')[:MAX_METIN]}"""
     return await gemini_calistir(prompt)
