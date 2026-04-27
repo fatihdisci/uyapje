@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import traceback
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -18,7 +19,23 @@ from parser import dosya_parse
 
 load_dotenv()
 
-app = FastAPI(title="UYAP Hukuk Asistanı")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init_db()
+    db.migrate()
+    yield
+
+
+# dava_id → {"ids": frozenset[int], "metin": str}
+_metin_cache: dict = {}
+
+
+def _cache_temizle(dava_id: str):
+    _metin_cache.pop(dava_id, None)
+
+
+app = FastAPI(title="UYAP Hukuk Asistanı", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -28,12 +45,11 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def baslangic():
-    db.init_db()
-
-
 # ========== Modeller ==========
+
+class BaglamdaIstek(BaseModel):
+    baglamda: int  # 0 veya 1
+
 
 class DavaIstek(BaseModel):
     mahkeme: str
@@ -161,6 +177,7 @@ async def dosya_yukle(dava_id: str, file: UploadFile = File(...)):
         dava_id, file.filename or "dosya", ext,
         sonuc["metin"], sonuc.get("meta", {}),
     )
+    _cache_temizle(dava_id)
     return {"id": yeni_id, "uzunluk": len(sonuc["metin"])}
 
 
@@ -171,16 +188,38 @@ def dosyalari_listele(dava_id: str):
 
 @app.delete("/api/dosya/{dosya_id}")
 def dosya_sil(dosya_id: int):
+    dava_id = db.dosyanin_dava_id(dosya_id)
     db.dosya_sil(dosya_id)
+    if dava_id:
+        _cache_temizle(dava_id)
+    return {"ok": True}
+
+
+@app.patch("/api/dosya/{dosya_id}/baglamda")
+def dosya_baglamda(dosya_id: int, istek: BaglamdaIstek):
+    dava_id = db.dosyanin_dava_id(dosya_id)
+    db.dosya_baglamda_guncelle(dosya_id, istek.baglamda)
+    if dava_id:
+        _cache_temizle(dava_id)
     return {"ok": True}
 
 
 # ========== AI Endpointleri ==========
 
 def _dava_metni(dava_id: str) -> str:
+    secili_ids = db.baglamda_idleri(dava_id)
+    if not secili_ids:
+        raise HTTPException(
+            400,
+            "Bağlama eklenmiş dosya yok. Dosya listesindeki "
+            "geçiş düğmesinden en az bir dosyayı seçin."
+        )
+    anahtar = frozenset(secili_ids)
+    cached = _metin_cache.get(dava_id)
+    if cached and cached["ids"] == anahtar:
+        return cached["metin"]
     metin = db.dosyalari_metin_birlestir(dava_id)
-    if not metin:
-        raise HTTPException(400, "Bu davaya henüz dosya yüklenmemiş.")
+    _metin_cache[dava_id] = {"ids": anahtar, "metin": metin}
     return metin
 
 
@@ -189,13 +228,13 @@ async def sohbet(dava_id: str, istek: SohbetIstek):
     dava = db.dava_getir(dava_id)
     metin = _dava_metni(dava_id)
     gecmis = db.sohbet_getir(dava_id)
-    db.sohbet_kaydet(dava_id, "user", istek.soru)
     try:
         yanit = await gc.sohbet(metin, istek.soru, gecmis, taraf=dava.get("taraf") if dava else None)
     except Exception as e:
         print(f"[SOHBET HATASI] {type(e).__name__}: {e}")
         traceback.print_exc()
         raise HTTPException(500, str(e) or repr(e))
+    db.sohbet_kaydet(dava_id, "user", istek.soru)
     db.sohbet_kaydet(dava_id, "assistant", yanit)
     return {"yanit": yanit}
 

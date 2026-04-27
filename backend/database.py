@@ -66,6 +66,15 @@ def init_db():
         c.executescript(SCHEMA)
 
 
+def migrate():
+    """Mevcut DB'ye yeni kolonları ekler — idempotent."""
+    with baglan() as c:
+        try:
+            c.execute("ALTER TABLE dosyalar ADD COLUMN baglamda INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # kolon zaten var
+
+
 def dava_olustur(mahkeme: str, konu: str, taraf: str = "",
                  durum: str = "Aktif", sonraki_durusma: Optional[str] = None) -> str:
     dava_id = str(uuid.uuid4())[:8]
@@ -90,9 +99,15 @@ def dava_getir(dava_id: str) -> Optional[dict]:
     return dict(r) if r else None
 
 
+_GUVENLI_ALANLAR = {"mahkeme", "konu", "taraf", "durum", "sonraki_durusma"}
+
+
 def dava_guncelle(dava_id: str, **alanlar):
     if not alanlar:
         return
+    gecersiz = set(alanlar) - _GUVENLI_ALANLAR
+    if gecersiz:
+        raise ValueError(f"Geçersiz alan adları: {gecersiz}")
     set_str = ", ".join(f"{k}=?" for k in alanlar)
     with baglan() as c:
         c.execute(
@@ -122,7 +137,7 @@ def dosya_ekle(dava_id: str, dosya_adi: str, format: str, metin: str, meta: dict
 def dosyalari_listele(dava_id: str) -> list:
     with baglan() as c:
         rows = c.execute(
-            "SELECT id, dosya_adi, format, meta, yukleme_tarihi FROM dosyalar "
+            "SELECT id, dosya_adi, format, meta, yukleme_tarihi, baglamda FROM dosyalar "
             "WHERE dava_id=? ORDER BY yukleme_tarihi DESC",
             (dava_id,),
         ).fetchall()
@@ -130,12 +145,35 @@ def dosyalari_listele(dava_id: str) -> list:
 
 
 def dosyalari_metin_birlestir(dava_id: str) -> str:
+    """Sadece baglamda=1 olan dosyaların metinlerini birleştirir."""
     with baglan() as c:
         rows = c.execute(
-            "SELECT dosya_adi, metin FROM dosyalar WHERE dava_id=? ORDER BY yukleme_tarihi",
+            "SELECT dosya_adi, metin FROM dosyalar "
+            "WHERE dava_id=? AND baglamda=1 ORDER BY yukleme_tarihi",
             (dava_id,),
         ).fetchall()
     return "\n\n".join(f"=== {r['dosya_adi']} ===\n{r['metin']}" for r in rows)
+
+
+def baglamda_idleri(dava_id: str) -> list:
+    """Bağlama seçili dosyaların ID listesini döner (cache anahtarı için)."""
+    with baglan() as c:
+        rows = c.execute(
+            "SELECT id FROM dosyalar WHERE dava_id=? AND baglamda=1 ORDER BY id",
+            (dava_id,),
+        ).fetchall()
+    return [r["id"] for r in rows]
+
+
+def dosya_baglamda_guncelle(dosya_id: int, baglamda: int):
+    with baglan() as c:
+        c.execute("UPDATE dosyalar SET baglamda=? WHERE id=?", (baglamda, dosya_id))
+
+
+def dosyanin_dava_id(dosya_id: int) -> Optional[str]:
+    with baglan() as c:
+        r = c.execute("SELECT dava_id FROM dosyalar WHERE id=?", (dosya_id,)).fetchone()
+    return r["dava_id"] if r else None
 
 
 def dosya_sil(dosya_id: int):

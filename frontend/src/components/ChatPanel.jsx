@@ -47,6 +47,13 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
   const hizliEylem = async (tur) => {
     if (bekleniyor) return
     const baslik = { ozet: 'Dava özeti', risk: 'Risk analizi', durusma: 'Duruşma hazırlığı', ictihat: 'İçtihat araştırması' }[tur]
+
+    let tarih = null
+    if (tur === 'durusma') {
+      tarih = dava.sonraki_durusma || prompt("Duruşma tarihi (YYYY-MM-DD):")
+      if (!tarih) return
+    }
+
     setMesajlar(m => [...m, { rol: 'user', icerik: `[${baslik} istendi]` }])
     setBekleniyor(true)
     setBekMesaj(tur === 'ictihat'
@@ -56,13 +63,8 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
       let yanit
       if (tur === 'ozet') yanit = (await api.ozet(dava.id)).yanit
       else if (tur === 'risk') yanit = (await api.risk(dava.id)).yanit
-      else if (tur === 'durusma') {
-        const t = dava.sonraki_durusma || prompt("Duruşma tarihi (YYYY-MM-DD):")
-        if (!t) { setBekleniyor(false); return }
-        yanit = (await api.durusma(dava.id, t)).yanit
-      } else if (tur === 'ictihat') {
-        yanit = (await api.ictihat(dava.id, null)).yanit
-      }
+      else if (tur === 'durusma') yanit = (await api.durusma(dava.id, tarih)).yanit
+      else if (tur === 'ictihat') yanit = (await api.ictihat(dava.id, null)).yanit
       setMesajlar(m => [...m, { rol: 'assistant', icerik: yanit, ictihat: tur === 'ictihat' }])
     } catch (err) {
       onToast(`Hata: ${err.message}`, 'err')
