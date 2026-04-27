@@ -84,7 +84,7 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
         <div className="main-title">
           <h2>{dava.mahkeme}</h2>
           <div className="main-title-sub">
-            #{dava.id} · {dava.konu}
+            Dosya No: {dava.konu}
             {dava.sonraki_durusma && ` · Duruşma: ${dava.sonraki_durusma}`}
           </div>
         </div>

@@ -61,7 +61,7 @@ export default function Sidebar({ davalar, aktifDava, secim, yarinki, sistem, on
       </div>
 
       <div className="sidebar-actions">
-        <button className="btn" onClick={() => setYeniAcik(true)}>+ Yeni Dava</button>
+        <button className="btn" onClick={() => setYeniAcik(true)}>+ Yeni Dosya</button>
       </div>
 
       <div className="system-status">
@@ -78,26 +78,16 @@ export default function Sidebar({ davalar, aktifDava, secim, yarinki, sistem, on
       {yeniAcik && (
         <div className="modal-overlay" onClick={() => setYeniAcik(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>Yeni Dava</h3>
+            <h3>Yeni Dosya Ekle</h3>
             <div className="field">
-              <label>Mahkeme</label>
+              <label>Mahkeme Adı</label>
               <input value={form.mahkeme} onChange={e => setForm({...form, mahkeme: e.target.value})}
                 placeholder="örn. İstanbul 5. Asliye Hukuk Mahkemesi" />
             </div>
             <div className="field">
-              <label>Konu</label>
+              <label>Dosya No (Esas/Karar)</label>
               <input value={form.konu} onChange={e => setForm({...form, konu: e.target.value})}
-                placeholder="örn. Kira tazminatı" />
-            </div>
-            <div className="field">
-              <label>Taraflar</label>
-              <input value={form.taraf} onChange={e => setForm({...form, taraf: e.target.value})}
-                placeholder="örn. Ahmet Yılmaz / Mehmet Demir" />
-            </div>
-            <div className="field">
-              <label>Sonraki Duruşma</label>
-              <input type="date" value={form.sonraki_durusma}
-                onChange={e => setForm({...form, sonraki_durusma: e.target.value})} />
+                placeholder="örn. 2024/123 Esas" />
             </div>
             <div className="modal-actions">
               <button className="btn ghost sm" onClick={() => setYeniAcik(false)}>İptal</button>

@@ -18,13 +18,9 @@ export default function App() {
     setTimeout(() => setToastlar(t => t.filter(x => x.id !== id)), 5000)
   }
 
-  const yukle = async () => {
+  const yukleSistem = async () => {
     try {
-      const [d, y, s] = await Promise.all([
-        api.davalar(), api.yarinkiDurusmalar(), api.sistemDurum()
-      ])
-      setDavalar(d)
-      setYarinki(y)
+      const s = await api.sistemDurum()
       setSistem(s)
       if (!s.gemini_kurulu) {
         toast("Gemini CLI kurulu değil — terminalde: npm install -g @google/gemini-cli && gemini auth login", 'warn')
@@ -35,19 +31,33 @@ export default function App() {
         toast("Yargı MCP kurulu değil — içtihat araştırması çalışmaz", 'info')
       }
     } catch (err) {
+      console.error("Sistem durum hatası:", err)
+    }
+  }
+
+  const yukleDavalar = async () => {
+    try {
+      const [d, y] = await Promise.all([
+        api.davalar(), api.yarinkiDurusmalar()
+      ])
+      setDavalar(d)
+      setYarinki(y)
+    } catch (err) {
       toast(`Backend bağlantı hatası: ${err.message}`, 'err')
     }
   }
 
-  useEffect(() => { yukle() }, [])
+  useEffect(() => { 
+    yukleDavalar()
+    yukleSistem()
+  }, [])
 
   const yeniDava = async (d) => {
     try {
       const { id } = await api.davaOlustur(d)
-      await yukle()
-      const yeni = (await api.davalar()).find(x => x.id === id)
-      setAktifDava(yeni || null)
-      toast(`Dava oluşturuldu (#${id})`, 'info')
+      await yukleDavalar()
+      setAktifDava({ id, ...d })
+      toast(`Dosya eklendi (#${id})`, 'info')
     } catch (err) {
       toast(`Hata: ${err.message}`, 'err')
     }
@@ -58,7 +68,7 @@ export default function App() {
     try {
       await api.davaSil(id)
       if (aktifDava?.id === id) setAktifDava(null)
-      await yukle()
+      await yukleDavalar()
       toast(`Dava silindi (#${id})`, 'info')
     } catch (err) {
       toast(`Silme hatası: ${err.message}`, 'err')
@@ -74,7 +84,7 @@ export default function App() {
         yarinki={yarinki}
         sistem={sistem}
         onYeniDava={yeniDava}
-        onYenile={yukle}
+        onYenile={yukleDavalar}
         onDavaSil={davaSil}
       />
 
