@@ -90,9 +90,15 @@ def dava_getir(dava_id: str) -> Optional[dict]:
     return dict(r) if r else None
 
 
+_GUVENLI_ALANLAR = {"mahkeme", "konu", "taraf", "durum", "sonraki_durusma"}
+
+
 def dava_guncelle(dava_id: str, **alanlar):
     if not alanlar:
         return
+    gecersiz = set(alanlar) - _GUVENLI_ALANLAR
+    if gecersiz:
+        raise ValueError(f"Geçersiz alan adları: {gecersiz}")
     set_str = ", ".join(f"{k}=?" for k in alanlar)
     with baglan() as c:
         c.execute(

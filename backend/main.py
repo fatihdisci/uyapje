@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import traceback
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -18,7 +19,14 @@ from parser import dosya_parse
 
 load_dotenv()
 
-app = FastAPI(title="UYAP Hukuk Asistanı")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init_db()
+    yield
+
+
+app = FastAPI(title="UYAP Hukuk Asistanı", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -26,11 +34,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def baslangic():
-    db.init_db()
 
 
 # ========== Modeller ==========
@@ -189,13 +192,13 @@ async def sohbet(dava_id: str, istek: SohbetIstek):
     dava = db.dava_getir(dava_id)
     metin = _dava_metni(dava_id)
     gecmis = db.sohbet_getir(dava_id)
-    db.sohbet_kaydet(dava_id, "user", istek.soru)
     try:
         yanit = await gc.sohbet(metin, istek.soru, gecmis, taraf=dava.get("taraf") if dava else None)
     except Exception as e:
         print(f"[SOHBET HATASI] {type(e).__name__}: {e}")
         traceback.print_exc()
         raise HTTPException(500, str(e) or repr(e))
+    db.sohbet_kaydet(dava_id, "user", istek.soru)
     db.sohbet_kaydet(dava_id, "assistant", yanit)
     return {"yanit": yanit}
 

@@ -12,7 +12,10 @@ from promptlar import (
     TARAF_BILGISI,
 )
 
-TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "180"))
+try:
+    TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "180"))
+except (ValueError, TypeError):
+    TIMEOUT = 180
 
 
 def gemini_kurulu_mu() -> bool:

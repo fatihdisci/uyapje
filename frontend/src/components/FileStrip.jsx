@@ -24,8 +24,12 @@ export default function FileStrip({ davaId, dosyalar, onYenile, onToast }) {
 
   const sil = async (id, ad) => {
     if (!window.confirm(`"${ad}" dosyasını silmek istediğinize emin misiniz?`)) return
-    await api.dosyaSil(id)
-    onYenile()
+    try {
+      await api.dosyaSil(id)
+      onYenile()
+    } catch (err) {
+      onToast(`"${ad}" silinemedi: ${err.message}`, 'err')
+    }
   }
 
   return (

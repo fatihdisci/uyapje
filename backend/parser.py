@@ -26,15 +26,18 @@ def pdf_parse(yol: str) -> dict:
 
 
 def tiff_parse(yol: str) -> dict:
-    img = Image.open(yol)
     parcalar = []
-    for frame in range(getattr(img, 'n_frames', 1)):
-        img.seek(frame)
-        kopyasi = img.copy().convert("RGB")
-        if kopyasi.width > 2000:
-            oran = 2000 / kopyasi.width
-            kopyasi = kopyasi.resize((2000, int(kopyasi.height * oran)))
-        parcalar.append(pytesseract.image_to_string(kopyasi, lang='tur'))
+    img = Image.open(yol)
+    try:
+        for frame in range(getattr(img, 'n_frames', 1)):
+            img.seek(frame)
+            kopyasi = img.copy().convert("RGB")
+            if kopyasi.width > 2000:
+                oran = 2000 / kopyasi.width
+                kopyasi = kopyasi.resize((2000, int(kopyasi.height * oran)))
+            parcalar.append(pytesseract.image_to_string(kopyasi, lang='tur'))
+    finally:
+        img.close()
     return {"metin": "\n\n".join(parcalar), "meta": {"frame": len(parcalar)}}
 
 
