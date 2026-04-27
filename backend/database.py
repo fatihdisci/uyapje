@@ -4,11 +4,10 @@ import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import datetime
 from typing import Optional
 
 DB_YOL = os.getenv("DB_YOL", "./uyap.db")
-
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS davalar (
@@ -18,6 +17,7 @@ CREATE TABLE IF NOT EXISTS davalar (
     taraf TEXT,
     durum TEXT,
     sonraki_durusma DATE,
+    dizi_yolu TEXT,
     olusturma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -28,12 +28,24 @@ CREATE TABLE IF NOT EXISTS dosyalar (
     format TEXT,
     metin TEXT,
     meta TEXT,
+    baglamda INTEGER DEFAULT 0,
+    dosya_yolu TEXT,
     yukleme_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sessionlar (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dava_id TEXT REFERENCES davalar(id) ON DELETE CASCADE,
+    klasor TEXT,
+    baslik TEXT,
+    ozet TEXT,
+    olusturma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS sohbet_gecmisi (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dava_id TEXT REFERENCES davalar(id) ON DELETE CASCADE,
+    session_id INTEGER REFERENCES sessionlar(id) ON DELETE CASCADE,
     rol TEXT,
     icerik TEXT,
     tarih TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -67,22 +79,41 @@ def init_db():
 
 
 def migrate():
-    """Mevcut DB'ye yeni kolonları ekler — idempotent."""
+    """Mevcut DB'ye yeni kolonları ve tabloları ekler — idempotent."""
     with baglan() as c:
-        try:
-            c.execute("ALTER TABLE dosyalar ADD COLUMN baglamda INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass  # kolon zaten var
+        for stmt in [
+            "ALTER TABLE dosyalar ADD COLUMN baglamda INTEGER DEFAULT 0",
+            "ALTER TABLE dosyalar ADD COLUMN dosya_yolu TEXT",
+            "ALTER TABLE davalar ADD COLUMN dizi_yolu TEXT",
+            "ALTER TABLE sohbet_gecmisi ADD COLUMN session_id INTEGER",
+        ]:
+            try:
+                c.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS sessionlar (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dava_id TEXT REFERENCES davalar(id) ON DELETE CASCADE,
+                klasor TEXT,
+                baslik TEXT,
+                ozet TEXT,
+                olusturma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
+
+# ── Davalar ──────────────────────────────────────────────────────────────────
 
 def dava_olustur(mahkeme: str, konu: str, taraf: str = "",
-                 durum: str = "Aktif", sonraki_durusma: Optional[str] = None) -> str:
+                 durum: str = "Aktif", sonraki_durusma: Optional[str] = None,
+                 dizi_yolu: Optional[str] = None) -> str:
     dava_id = str(uuid.uuid4())[:8]
     with baglan() as c:
         c.execute(
-            "INSERT INTO davalar (id, mahkeme, konu, taraf, durum, sonraki_durusma) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (dava_id, mahkeme, konu, taraf, durum, sonraki_durusma),
+            "INSERT INTO davalar (id, mahkeme, konu, taraf, durum, sonraki_durusma, dizi_yolu) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (dava_id, mahkeme, konu, taraf, durum, sonraki_durusma, dizi_yolu),
         )
     return dava_id
 
@@ -99,7 +130,7 @@ def dava_getir(dava_id: str) -> Optional[dict]:
     return dict(r) if r else None
 
 
-_GUVENLI_ALANLAR = {"mahkeme", "konu", "taraf", "durum", "sonraki_durusma"}
+_GUVENLI_ALANLAR = {"mahkeme", "konu", "taraf", "durum", "sonraki_durusma", "dizi_yolu"}
 
 
 def dava_guncelle(dava_id: str, **alanlar):
@@ -118,18 +149,28 @@ def dava_guncelle(dava_id: str, **alanlar):
 
 def dava_sil(dava_id: str):
     with baglan() as c:
-        c.execute("DELETE FROM dosyalar WHERE dava_id=?", (dava_id,))
-        c.execute("DELETE FROM sohbet_gecmisi WHERE dava_id=?", (dava_id,))
         c.execute("DELETE FROM ictihat_cache WHERE dava_id=?", (dava_id,))
         c.execute("DELETE FROM davalar WHERE id=?", (dava_id,))
+        # dosyalar, sessionlar, sohbet_gecmisi CASCADE ile silinir
 
 
-def dosya_ekle(dava_id: str, dosya_adi: str, format: str, metin: str, meta: dict) -> int:
+def yarinki_durusmalar() -> list:
+    with baglan() as c:
+        rows = c.execute(
+            "SELECT * FROM davalar WHERE sonraki_durusma = date('now', '+1 day')"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Dosyalar ─────────────────────────────────────────────────────────────────
+
+def dosya_ekle(dava_id: str, dosya_adi: str, format: str, metin: str,
+               meta: dict, dosya_yolu: Optional[str] = None) -> int:
     with baglan() as c:
         cur = c.execute(
-            "INSERT INTO dosyalar (dava_id, dosya_adi, format, metin, meta) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (dava_id, dosya_adi, format, metin, json.dumps(meta)),
+            "INSERT INTO dosyalar (dava_id, dosya_adi, format, metin, meta, dosya_yolu) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (dava_id, dosya_adi, format, metin, json.dumps(meta), dosya_yolu),
         )
         return cur.lastrowid
 
@@ -156,7 +197,6 @@ def dosyalari_metin_birlestir(dava_id: str) -> str:
 
 
 def baglamda_idleri(dava_id: str) -> list:
-    """Bağlama seçili dosyaların ID listesini döner (cache anahtarı için)."""
     with baglan() as c:
         rows = c.execute(
             "SELECT id FROM dosyalar WHERE dava_id=? AND baglamda=1 ORDER BY id",
@@ -181,31 +221,70 @@ def dosya_sil(dosya_id: int):
         c.execute("DELETE FROM dosyalar WHERE id=?", (dosya_id,))
 
 
-def sohbet_kaydet(dava_id: str, rol: str, icerik: str):
+# ── Sessionlar ───────────────────────────────────────────────────────────────
+
+def session_olustur(dava_id: str, klasor: str, baslik: str) -> int:
     with baglan() as c:
-        c.execute(
-            "INSERT INTO sohbet_gecmisi (dava_id, rol, icerik) VALUES (?, ?, ?)",
-            (dava_id, rol, icerik),
+        cur = c.execute(
+            "INSERT INTO sessionlar (dava_id, klasor, baslik) VALUES (?, ?, ?)",
+            (dava_id, klasor, baslik),
         )
+        return cur.lastrowid
 
 
-def sohbet_getir(dava_id: str) -> list:
+def sessionlari_listele(dava_id: str) -> list:
     with baglan() as c:
         rows = c.execute(
-            "SELECT rol, icerik, tarih FROM sohbet_gecmisi "
-            "WHERE dava_id=? ORDER BY tarih ASC",
+            "SELECT id, dava_id, klasor, baslik, ozet, olusturma_tarihi "
+            "FROM sessionlar WHERE dava_id=? ORDER BY olusturma_tarihi ASC",
             (dava_id,),
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-def yarinki_durusmalar() -> list:
+def session_getir(session_id: int) -> Optional[dict]:
     with baglan() as c:
-        rows = c.execute(
-            "SELECT * FROM davalar WHERE sonraki_durusma = date('now', '+1 day')"
-        ).fetchall()
+        r = c.execute(
+            "SELECT id, dava_id, klasor, baslik, ozet, olusturma_tarihi "
+            "FROM sessionlar WHERE id=?",
+            (session_id,),
+        ).fetchone()
+    return dict(r) if r else None
+
+
+def session_ozet_guncelle(session_id: int, ozet: str):
+    with baglan() as c:
+        c.execute("UPDATE sessionlar SET ozet=? WHERE id=?", (ozet, session_id))
+
+
+# ── Sohbet ───────────────────────────────────────────────────────────────────
+
+def sohbet_kaydet(dava_id: str, session_id: int, rol: str, icerik: str):
+    with baglan() as c:
+        c.execute(
+            "INSERT INTO sohbet_gecmisi (dava_id, session_id, rol, icerik) VALUES (?, ?, ?, ?)",
+            (dava_id, session_id, rol, icerik),
+        )
+
+
+def sohbet_getir(dava_id: str, session_id: Optional[int] = None) -> list:
+    with baglan() as c:
+        if session_id is not None:
+            rows = c.execute(
+                "SELECT rol, icerik, tarih FROM sohbet_gecmisi "
+                "WHERE dava_id=? AND session_id=? ORDER BY tarih ASC",
+                (dava_id, session_id),
+            ).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT rol, icerik, tarih FROM sohbet_gecmisi "
+                "WHERE dava_id=? ORDER BY tarih ASC",
+                (dava_id,),
+            ).fetchall()
     return [dict(r) for r in rows]
 
+
+# ── İçtihat cache ─────────────────────────────────────────────────────────────
 
 def ictihat_cache_yaz(dava_id: Optional[str], sorgu: str, sonuc: str):
     with baglan() as c:

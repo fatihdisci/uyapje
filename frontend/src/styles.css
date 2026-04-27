@@ -235,6 +235,40 @@ input, textarea, button { font-family: inherit; }
 .msg.user .msg-time { color: rgba(0,0,0,0.6); }
 .msg.assistant .msg-time { color: var(--muted); }
 
+/* Session bar */
+.session-bar {
+  display: flex; gap: 4px; padding: 6px 22px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto; flex-shrink: 0;
+  background: var(--bg-2);
+}
+.session-tab {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px; white-space: nowrap;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.12s;
+  max-width: 160px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.session-tab:hover { border-color: var(--gold); color: var(--text); }
+.session-tab.aktif { border-color: var(--gold); color: var(--gold); background: rgba(201, 168, 76, 0.08); }
+.session-yeni {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  font-size: 11px; white-space: nowrap;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+.session-yeni:hover { border-color: var(--gold); color: var(--gold); }
+
 /* Date separator */
 .date-sep {
   display: flex; align-items: center; gap: 10px;

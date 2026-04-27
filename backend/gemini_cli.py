@@ -17,8 +17,6 @@ try:
 except (ValueError, TypeError):
     TIMEOUT = 180
 
-# Gemini 1.5/2.0 context window ~1M token ≈ 3-4M karakter.
-# 500k karakter ≈ 125k token, yeterince büyük ve güvenli.
 try:
     MAX_METIN = int(os.getenv("GEMINI_MAX_METIN", "500000"))
 except (ValueError, TypeError):
@@ -30,19 +28,16 @@ def gemini_kurulu_mu() -> bool:
 
 
 def _gemini_sync(prompt: str) -> str:
-    """Gemini CLI'ı senkron subprocess olarak çalıştırır (thread içinden çağrılır)."""
     gemini_yol = shutil.which("gemini")
     if not gemini_yol:
         raise RuntimeError(
             "Gemini CLI bulunamadı. Lütfen 'npm install -g @google/gemini-cli' çalıştırın."
         )
-
     ortam = {
         **os.environ,
         "PYTHONIOENCODING": "utf-8",
         "GEMINI_CLI_TRUST_WORKSPACE": "true",
     }
-
     try:
         result = subprocess.run(
             [gemini_yol, "-p", " ", "--yolo", "--skip-trust"],
@@ -58,7 +53,6 @@ def _gemini_sync(prompt: str) -> str:
         raise RuntimeError(
             f"Gemini {TIMEOUT} saniyede yanıt vermedi. Dava metni çok büyük olabilir."
         )
-
     if result.returncode != 0:
         hata = (result.stderr or "").strip()
         print(f"[GEMINI HATA] returncode={result.returncode}")
@@ -69,16 +63,13 @@ def _gemini_sync(prompt: str) -> str:
         if "trust" in hata.lower():
             raise RuntimeError("Gemini trust hatası. Lütfen dizini güvenilir olarak işaretleyin.")
         raise RuntimeError(f"Gemini hatası (kod {result.returncode}): {hata[:500] or (result.stdout or '')[:500]}")
-
     yanit = (result.stdout or "").strip()
     if not yanit:
         print(f"[GEMINI UYARI] Boş yanıt. stderr: {(result.stderr or '')[:500]}")
-
     return yanit
 
 
 async def gemini_calistir(prompt: str) -> str:
-    """Gemini CLI'ı thread pool üzerinden çalıştırır (Windows uyumlu)."""
     return await asyncio.to_thread(_gemini_sync, prompt)
 
 
@@ -89,8 +80,8 @@ def get_sistem_promptu(taraf: str = None) -> str:
     return p
 
 
-def _gecmis_formatla(gecmis: list, max_karakter: int = 20000) -> str:
-    """En yeni mesajlardan geriye doğru max_karakter sığana kadar geçmişi alır."""
+def gecmis_formatla(gecmis: list, max_karakter: int = 20000) -> str:
+    """En yeni mesajlardan geriye doğru max_karakter sığana kadar alır."""
     satirlar = []
     toplam = 0
     for m in reversed(gecmis):
@@ -102,8 +93,19 @@ def _gecmis_formatla(gecmis: list, max_karakter: int = 20000) -> str:
     return "\n".join(reversed(satirlar))
 
 
-async def sohbet(dava_metni: str, soru: str, gecmis: list, taraf: str = None) -> str:
-    gecmis_str = _gecmis_formatla(gecmis)
+async def session_ozeti(gecmis: list) -> str:
+    """Uzun bir konuşma geçmişini 3-5 cümleyle özetler (önbellek için)."""
+    gecmis_str = gecmis_formatla(gecmis, max_karakter=30000)
+    prompt = (
+        "Aşağıdaki hukuki danışmanlık konuşmasını kısa ve bilgilendirici şekilde özetle. "
+        "Tartışılan hukuki konuları, önemli tespitleri ve varılan sonuçları belirt. "
+        "Özet 3-5 cümle olsun, Türkçe yaz.\n\n"
+        f"KONUŞMA:\n{gecmis_str}\n\nÖZET:"
+    )
+    return await gemini_calistir(prompt)
+
+
+async def sohbet(dava_metni: str, soru: str, gecmis_str: str, taraf: str = None) -> str:
     prompt = f"""{get_sistem_promptu(taraf)}
 
 DAVA DOSYASI:
@@ -136,7 +138,6 @@ async def risk_analizi(dava_metni: str, taraf: str = None) -> str:
 
 
 async def ictihat_arastir(dava_metni: str = None, ozel_sorgu: str = None, taraf: str = None) -> str:
-    """Yargı MCP tool'ları Gemini settings.json'da kayıtlıysa otomatik çağrılır."""
     if ozel_sorgu:
         prompt = (
             f"Yargı MCP araçlarını kullanarak şu konuyu detaylıca araştır: {ozel_sorgu}\n"
