@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { api } from '../api.js'
 
@@ -6,13 +6,32 @@ export default function IctihatPanel({ dava, onKapat, onToast }) {
   const [sorgu, setSorgu] = useState("")
   const [sonuc, setSonuc] = useState("")
   const [bekleniyor, setBekleniyor] = useState(false)
+  const [sessionId, setSessionId] = useState(null)
+
+  useEffect(() => {
+    let iptal = false
+    const sessionHazirla = async () => {
+      try {
+        let sessionlar = await api.sessionlari(dava.id)
+        if (sessionlar.length === 0) {
+          const yeni = await api.yeniSession(dava.id)
+          sessionlar = [yeni]
+        }
+        if (!iptal) setSessionId(sessionlar[sessionlar.length - 1].id)
+      } catch (err) {
+        onToast?.(`İçtihat session bilgisi alınamadı: ${err.message}`, 'err')
+      }
+    }
+    sessionHazirla()
+    return () => { iptal = true }
+  }, [dava.id])
 
   const ara = async () => {
-    if (!sorgu.trim() || bekleniyor) return
+    if (!sorgu.trim() || bekleniyor || !sessionId) return
     setBekleniyor(true)
     setSonuc("")
     try {
-      const { yanit } = await api.ictihat(dava.id, sorgu.trim())
+      const { yanit } = await api.ictihat(dava.id, sorgu.trim(), sessionId)
       setSonuc(yanit)
     } catch (err) {
       onToast(`İçtihat hatası: ${err.message}`, 'err')
@@ -34,7 +53,7 @@ export default function IctihatPanel({ dava, onKapat, onToast }) {
           onKeyDown={e => e.key === 'Enter' && ara()}
           placeholder="örn. kira tazminatı emsal Yargıtay kararları"
         />
-        <button className="btn sm" onClick={ara} disabled={bekleniyor}>Ara</button>
+        <button className="btn sm" onClick={ara} disabled={bekleniyor || !sessionId}>Ara</button>
       </div>
       <div className="ictihat-result">
         {bekleniyor && (

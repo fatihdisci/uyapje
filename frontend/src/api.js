@@ -33,6 +33,8 @@ export const api = {
   },
   dosyaSil: (dosyaId) => istek(`/dosya/${dosyaId}`, { method: "DELETE" }),
   dosyaBaglamda: (dosyaId, baglamda) => istek(`/dosya/${dosyaId}/baglamda`, { method: "PATCH", body: JSON.stringify({ baglamda }) }),
+  evrakAnalizleri: (id) => istek(`/dava/${id}/evrak-analizleri`),
+  kronoloji: (id) => istek(`/dava/${id}/kronoloji`),
   sessionlari: (id) => istek(`/dava/${id}/sessionlar`),
   yeniSession: (id) => istek(`/dava/${id}/session`, { method: "POST" }),
   sohbetGecmisi: (id, sessionId) => istek(`/dava/${id}/sohbet?session_id=${sessionId}`),
@@ -41,4 +43,22 @@ export const api = {
   ozet: (id, sessionId) => istek(`/dava/${id}/ozet?session_id=${sessionId}`),
   risk: (id, sessionId) => istek(`/dava/${id}/risk?session_id=${sessionId}`),
   ictihat: (id, sorgu, sessionId) => istek(`/dava/${id}/ictihat`, { method: "POST", body: JSON.stringify({ sorgu, session_id: sessionId }) }),
+  dilekce: (id, dilekce_turu, ek_talimat, sessionId, ictihat_ekle = false) =>
+    istek(`/dava/${id}/dilekce`, { method: "POST", body: JSON.stringify({ dilekce_turu, ek_talimat, session_id: sessionId, ictihat_ekle }) }),
+  dilekceIndir: async (id, xml_icerik, dilekce_turu) => {
+    const res = await fetch(`${API}/dava/${id}/dilekce-indir`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ xml_icerik, dilekce_turu }),
+    })
+    if (!res.ok) {
+      let m = `Hata ${res.status}`; try { m = (await res.json()).detail || m } catch {}
+      throw new Error(m)
+    }
+    const blob = await res.blob()
+    const cd = res.headers.get("Content-Disposition") || ""
+    const match = cd.match(/filename="([^"]+)"/)
+    const dosyaAdi = match ? match[1] : "dilekce.udf"
+    return { blob, dosyaAdi }
+  },
 }

@@ -1,9 +1,12 @@
 import React, { useRef, useState } from 'react'
 import { api } from '../api.js'
 
+const FORMAT_ICON = { pdf: '📕', tiff: '🖼', tif: '🖼', udf: '📋', zip: '🗜', docx: '📝' }
+
 export default function FileStrip({ davaId, dosyalar, onYenile, onToast }) {
   const inpRef = useRef(null)
   const [yukleniyor, setYukleniyor] = useState(false)
+  const [silIslemi, setSilIslemi] = useState(null)
 
   const yukle = async (e) => {
     const files = [...(e.target.files || [])]
@@ -31,54 +34,105 @@ export default function FileStrip({ davaId, dosyalar, onYenile, onToast }) {
     }
   }
 
+  const hepsiniSec = async (sec) => {
+    try {
+      await Promise.all(
+        dosyalar
+          .filter(d => !!d.baglamda !== sec)
+          .map(d => api.dosyaBaglamda(d.id, sec ? 1 : 0))
+      )
+      onYenile()
+    } catch (err) {
+      onToast(`İşlem başarısız: ${err.message}`, 'err')
+    }
+  }
+
   const sil = async (id, ad) => {
-    if (!window.confirm(`"${ad}" dosyasını silmek istediğinize emin misiniz?`)) return
+    setSilIslemi(id)
     try {
       await api.dosyaSil(id)
       onYenile()
     } catch (err) {
       onToast(`"${ad}" silinemedi: ${err.message}`, 'err')
+    } finally {
+      setSilIslemi(null)
     }
   }
 
   const baglamdaKi = dosyalar.filter(d => d.baglamda).length
+  const hepsiSecili = dosyalar.length > 0 && baglamdaKi === dosyalar.length
+  const hicbiri = baglamdaKi === 0
 
   return (
-    <div className="file-strip">
-      <button className="btn ghost sm" onClick={() => inpRef.current?.click()} disabled={yukleniyor}>
-        {yukleniyor ? '⏳ Yükleniyor...' : '+ Dosya Ekle'}
-      </button>
-      <input ref={inpRef} type="file" multiple hidden
-        accept=".pdf,.tiff,.tif,.udf,.zip,.docx"
-        onChange={yukle} />
+    <div className="file-panel">
+      <div className="file-panel-header">
+        <div className="file-panel-title">
+          <span>Evraklar</span>
+          {dosyalar.length > 0 && (
+            <span className={`baglamda-badge ${hepsiSecili ? 'tam' : baglamdaKi > 0 ? 'kismi' : 'bos'}`}>
+              {baglamdaKi}/{dosyalar.length} bağlamda
+            </span>
+          )}
+        </div>
+        <div className="file-panel-actions">
+          {dosyalar.length > 0 && (
+            <>
+              <button
+                className="mini-btn"
+                onClick={() => hepsiniSec(!hepsiSecili)}
+                title={hepsiSecili ? 'Seçimi kaldır' : 'Hepsini seç'}
+              >
+                {hepsiSecili ? '☐ Kaldır' : '☑ Hepsini Seç'}
+              </button>
+              {!hicbiri && !hepsiSecili && (
+                <button className="mini-btn warn" onClick={() => hepsiniSec(false)}>
+                  ☐ Temizle
+                </button>
+              )}
+            </>
+          )}
+          <button className="mini-btn primary" onClick={() => inpRef.current?.click()} disabled={yukleniyor}>
+            {yukleniyor ? '⏳' : '+ Ekle'}
+          </button>
+          <input ref={inpRef} type="file" multiple hidden
+            accept=".pdf,.tiff,.tif,.udf,.zip,.docx"
+            onChange={yukle} />
+        </div>
+      </div>
 
-      {dosyalar.map(d => (
-        <span
-          key={d.id}
-          className={`file-pill ${d.baglamda ? 'baglamda-aktif' : 'baglamda-pasif'}`}
-          title={d.baglamda ? 'Bağlamda — tıkla çıkarmak için' : 'Bağlamda değil — tıkla eklemek için'}
-        >
-          <span className="baglamda-toggle" onClick={() => toggle(d.id, d.baglamda)}>
-            {d.baglamda ? '●' : '○'}
-          </span>
-          📄 {d.dosya_adi}
-          <span className="x" onClick={(e) => { e.stopPropagation(); sil(d.id, d.dosya_adi) }}>✕</span>
-        </span>
-      ))}
-
-      {dosyalar.length === 0 && !yukleniyor && (
-        <span style={{ color: 'var(--muted)', fontSize: 12, alignSelf: 'center' }}>
+      {dosyalar.length === 0 ? (
+        <div className="file-panel-empty">
           PDF, TIFF, UDF, ZIP veya DOCX yükleyin
-        </span>
-      )}
-
-      {dosyalar.length > 0 && (
-        <span className="baglamda-sayac" style={{
-          marginLeft: 'auto', fontSize: 11, color: baglamdaKi > 0 ? 'var(--green)' : 'var(--red)',
-          alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0
-        }}>
-          {baglamdaKi} / {dosyalar.length} bağlamda
-        </span>
+        </div>
+      ) : (
+        <div className="file-list">
+          {dosyalar.map(d => {
+            const icon = FORMAT_ICON[d.format?.toLowerCase()] || '📄'
+            const secili = !!d.baglamda
+            return (
+              <div
+                key={d.id}
+                className={`file-row ${secili ? 'secili' : ''}`}
+                onClick={() => toggle(d.id, d.baglamda)}
+                title={secili ? 'Bağlamdan çıkarmak için tıkla' : 'Bağlama eklemek için tıkla'}
+              >
+                <span className={`file-checkbox ${secili ? 'checked' : ''}`}>
+                  {secili ? '✓' : ''}
+                </span>
+                <span className="file-icon">{icon}</span>
+                <span className="file-name">{d.dosya_adi}</span>
+                <button
+                  className="file-sil"
+                  onClick={e => { e.stopPropagation(); sil(d.id, d.dosya_adi) }}
+                  disabled={silIslemi === d.id}
+                  title="Dosyayı sil"
+                >
+                  {silIslemi === d.id ? '…' : '✕'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )

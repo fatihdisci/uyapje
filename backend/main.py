@@ -13,11 +13,14 @@ from datetime import datetime
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 import database as db
 import gemini_cli as gc
+from evrak_zeka import analiz_markdown, evrak_analiz_et, kronoloji_markdown
 from parser import dosya_parse
+from udf_olustur import xml_to_udf
 
 load_dotenv()
 
@@ -158,6 +161,13 @@ class IctihatIstek(BaseModel):
     session_id: int
 
 
+class DilekceIstek(BaseModel):
+    dilekce_turu: str
+    ek_talimat: str = ""
+    session_id: int
+    ictihat_ekle: bool = False
+
+
 # ── Sistem ───────────────────────────────────────────────────────────────────
 
 @app.get("/api/sistem/durum")
@@ -168,8 +178,8 @@ async def sistem_durum():
     if gemini_var:
         try:
             result = subprocess.run(
-                [gemini_yol, "-p", "1+1=?", "--skip-trust", "--yolo"],
-                capture_output=True, text=True, timeout=30,
+                [gemini_yol, "--version"],
+                capture_output=True, text=True, timeout=10,
                 env={**os.environ, "GEMINI_CLI_TRUST_WORKSPACE": "true"},
             )
             gemini_hazir = result.returncode == 0
@@ -297,17 +307,59 @@ async def dosya_yukle(dava_id: str, file: UploadFile = File(...)):
         except Exception:
             pass
 
+    meta = sonuc.get("meta", {}) or {}
+    meta["analiz"] = evrak_analiz_et(file.filename or "dosya", sonuc["metin"], ext)
     yeni_id = db.dosya_ekle(
         dava_id, file.filename or "dosya", ext,
-        sonuc["metin"], sonuc.get("meta", {}), dosya_yolu,
+        sonuc["metin"], meta, dosya_yolu,
     )
     _cache_temizle(dava_id)
     return {"id": yeni_id, "uzunluk": len(sonuc["metin"])}
 
 
+def _analizli_dosyalar(dava_id: str) -> list:
+    dosyalar = db.dosyalari_detayli_listele(dava_id)
+    sonuc = []
+    for d in dosyalar:
+        try:
+            meta = json.loads(d.get("meta") or "{}")
+        except Exception:
+            meta = {}
+        analiz = meta.get("analiz")
+        if not analiz:
+            analiz = evrak_analiz_et(d.get("dosya_adi") or "dosya", d.get("metin") or "", d.get("format") or "")
+            meta["analiz"] = analiz
+            db.dosya_meta_guncelle(d["id"], meta)
+        sonuc.append({
+            "id": d["id"],
+            "dosya_adi": d["dosya_adi"],
+            "format": d["format"],
+            "yukleme_tarihi": d["yukleme_tarihi"],
+            "baglamda": d["baglamda"],
+            "analiz": analiz,
+        })
+    return sonuc
+
+
 @app.get("/api/dava/{dava_id}/dosyalar")
 def dosyalari_listele(dava_id: str):
     return db.dosyalari_listele(dava_id)
+
+
+@app.get("/api/dava/{dava_id}/evrak-analizleri")
+def evrak_analizleri(dava_id: str):
+    if not db.dava_getir(dava_id):
+        raise HTTPException(404, "Dava bulunamadı")
+    dosyalar = _analizli_dosyalar(dava_id)
+    return {"dosyalar": dosyalar, "markdown": analiz_markdown(dosyalar)}
+
+
+@app.get("/api/dava/{dava_id}/kronoloji")
+def dava_kronoloji(dava_id: str):
+    if not db.dava_getir(dava_id):
+        raise HTTPException(404, "Dava bulunamadı")
+    dosyalar = _analizli_dosyalar(dava_id)
+    return {"dosyalar": dosyalar, "markdown": kronoloji_markdown(dosyalar)}
 
 
 @app.delete("/api/dosya/{dosya_id}")
@@ -451,3 +503,66 @@ async def ictihat(dava_id: str, istek: IctihatIstek):
     db.sohbet_kaydet(dava_id, istek.session_id, "assistant", sonuc)
     _session_json_yaz(istek.session_id)
     return {"yanit": sonuc}
+
+
+class DilekceIndirIstek(BaseModel):
+    xml_icerik: str
+    dilekce_turu: str
+
+
+@app.post("/api/dava/{dava_id}/dilekce")
+async def dilekce_olustur(dava_id: str, istek: DilekceIstek):
+    dava = db.dava_getir(dava_id)
+    if not dava:
+        raise HTTPException(404, "Dava bulunamadı")
+    metin = _dava_metni(dava_id)
+    _session_kontrol(istek.session_id, dava_id)
+    tarih = datetime.now().strftime("%d.%m.%Y")
+    try:
+        xml_str = await gc.dilekce_olustur(
+            dava_metni=metin,
+            dilekce_turu=istek.dilekce_turu,
+            tarih=tarih,
+            mahkeme=dava.get("mahkeme", ""),
+            esas_no=dava.get("konu", ""),
+            konu=istek.dilekce_turu,
+            ek_talimat=istek.ek_talimat,
+            ictihat_ekle=istek.ictihat_ekle,
+        )
+    except Exception as e:
+        print(f"[DİLEKÇE HATASI] {type(e).__name__}: {e}")
+        traceback.print_exc()
+        raise HTTPException(500, str(e) or repr(e))
+
+    # Sohbet geçmişine kaydet
+    db.sohbet_kaydet(dava_id, istek.session_id, "user", f"[Dilekçe oluşturuldu — {istek.dilekce_turu}]")
+    db.sohbet_kaydet(dava_id, istek.session_id, "assistant",
+                     f"**{istek.dilekce_turu}** dilekçesi oluşturuldu. Önizleme panelinden düzenleyip indirebilirsiniz.")
+    _session_json_yaz(istek.session_id)
+
+    return {"xml": xml_str, "dilekce_turu": istek.dilekce_turu}
+
+
+@app.post("/api/dava/{dava_id}/dilekce-indir")
+async def dilekce_indir_endpoint(dava_id: str, istek: DilekceIndirIstek):
+    try:
+        udf_bytes = xml_to_udf(istek.xml_icerik, baslik=istek.dilekce_turu)
+    except Exception as e:
+        print(f"[UDF HATA] {e} — ham XML: {istek.xml_icerik[:300]}")
+        raise HTTPException(500, f"UDF dönüştürme başarısız: {e}")
+
+    tarih = datetime.now().strftime("%d%m%Y")
+    dosya_adi_ascii = f"dilekce_{_slug(istek.dilekce_turu)}_{tarih}.udf"
+    from urllib.parse import quote
+    dosya_adi = f"dilekce_{istek.dilekce_turu.lower().replace(' ', '_')}_{tarih}.udf"
+    dosya_adi_utf8 = quote(dosya_adi, safe="")
+    return Response(
+        content=udf_bytes,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{dosya_adi_ascii}"; '
+                f"filename*=UTF-8''{dosya_adi_utf8}"
+            )
+        },
+    )

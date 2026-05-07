@@ -18,7 +18,108 @@ const saatFormat = (tarih) => {
   return new Date(tarih).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
+const DILEKCE_GRUPLARI = [
+  {
+    grup: "En Çok Kullanılan",
+    turler: [
+      "Dava Dilekçesi",
+      "Cevap Dilekçesi",
+      "Temyiz Dilekçesi",
+      "İstinaf Dilekçesi",
+      "İhtiyati Tedbir Talebi",
+      "İhtiyati Haciz Talebi",
+      "İcra Takibi Talebi",
+    ],
+  },
+  {
+    grup: "İtiraz & Savunma",
+    turler: [
+      "Yetki İtirazı",
+      "Görev İtirazı",
+      "Zamanaşımı İtirazı",
+      "Hak Düşürücü Süre İtirazı",
+      "Borca İtiraz",
+      "İmzaya İtiraz",
+      "Bilirkişi Raporuna İtiraz",
+      "Keşif Talebine İtiraz",
+      "Karşı Dava Dilekçesi",
+    ],
+  },
+  {
+    grup: "Talep & Beyan",
+    turler: [
+      "Talep Dilekçesi",
+      "Beyan Dilekçesi",
+      "Islah Dilekçesi",
+      "Feragat Beyanı",
+      "Kabul Beyanı",
+      "Sulh Talebi",
+      "Keşif Talebi",
+      "Tanık Listesi",
+      "Delil Listesi",
+      "Belge İbraz Talebi",
+      "Tensip Talebi",
+      "Duruşma Erteleme Talebi",
+      "Taraf Değişikliği Talebi",
+    ],
+  },
+  {
+    grup: "İcra & Takip",
+    turler: [
+      "İcra Takibine İtiraz",
+      "Menfi Tespit Davası",
+      "İstirdat Davası",
+      "İcra İnkar Tazminatı Talebi",
+      "Hacizin Kaldırılması Talebi",
+      "İhalenin Feshi Talebi",
+      "Sıra Cetveline İtiraz",
+    ],
+  },
+  {
+    grup: "Üst Yargı",
+    turler: [
+      "Karar Düzeltme Talebi",
+      "Yargılamanın Yenilenmesi Talebi",
+      "Anayasa Mahkemesi Bireysel Başvuru",
+      "AİHM Başvurusu",
+    ],
+  },
+  {
+    grup: "Aile & Şahıs",
+    turler: [
+      "Boşanma Dava Dilekçesi",
+      "Nafaka Talebi",
+      "Velayet Değişikliği Talebi",
+      "Babalık Davası",
+      "Tanıma-Tenfiz Talebi",
+    ],
+  },
+  {
+    grup: "Ceza",
+    turler: [
+      "Şikâyet Dilekçesi",
+      "Suç Duyurusu",
+      "Müdafi Dilekçesi",
+      "Tutukluluk İtirazı",
+      "Tahliye Talebi",
+      "CMK 141 Tazminat Talebi",
+    ],
+  },
+  {
+    grup: "İdare & Vergi",
+    turler: [
+      "İdari İtiraz Dilekçesi",
+      "İdare Mahkemesi Dava Dilekçesi",
+      "Yürütmeyi Durdurma Talebi",
+      "Vergi İtiraz Dilekçesi",
+      "Danıştay Temyiz Dilekçesi",
+    ],
+  },
+]
+
+const DILEKCE_TURLERI = DILEKCE_GRUPLARI.flatMap(g => g.turler)
+
+export default function ChatPanel({ dava, onIctihatToggle, onToast, onDilekceOnizleme }) {
   const [sessionlar, setSessionlar] = useState([])
   const [aktifSession, setAktifSession] = useState(null)
   const [mesajlar, setMesajlar] = useState([])
@@ -26,6 +127,11 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
   const [taslak, setTaslak] = useState("")
   const [bekleniyor, setBekleniyor] = useState(false)
   const [bekMesaj, setBekMesaj] = useState("")
+  const [dilekceModal, setDilekceModal] = useState(false)
+  const [dilekceSecim, setDilekceSecim] = useState(DILEKCE_TURLERI[0])
+  const [dilekceOzelTur, setDilekceOzelTur] = useState("")
+  const [dilekceEk, setDilekceEk] = useState("")
+  const [dilekceIctihat, setDilekceIctihat] = useState(false)
   const listRef = useRef(null)
 
   // Dava değişince sessionları yükle
@@ -115,7 +221,14 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
 
   const hizliEylem = async (tur) => {
     if (bekleniyor || !aktifSession) return
-    const baslik = { ozet: 'Dava özeti', risk: 'Risk analizi', durusma: 'Duruşma hazırlığı', ictihat: 'İçtihat araştırması' }[tur]
+    const baslik = {
+      ozet: 'Dava özeti',
+      risk: 'Risk analizi',
+      durusma: 'Duruşma hazırlığı',
+      ictihat: 'İçtihat araştırması',
+      belgeler: 'Belge analizi',
+      kronoloji: 'Dava kronolojisi',
+    }[tur]
 
     let tarih = null
     if (tur === 'durusma') {
@@ -135,12 +248,42 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
       else if (tur === 'risk') yanit = (await api.risk(dava.id, aktifSession.id)).yanit
       else if (tur === 'durusma') yanit = (await api.durusma(dava.id, tarih, aktifSession.id)).yanit
       else if (tur === 'ictihat') yanit = (await api.ictihat(dava.id, null, aktifSession.id)).yanit
+      else if (tur === 'belgeler') yanit = (await api.evrakAnalizleri(dava.id)).markdown
+      else if (tur === 'kronoloji') yanit = (await api.kronoloji(dava.id)).markdown
       setMesajlar(m => [...m, { rol: 'assistant', icerik: yanit, tarih: new Date().toISOString(), ictihat: tur === 'ictihat' }])
     } catch (err) {
       onToast(`Hata: ${err.message}`, 'err')
       setMesajlar(m => m.slice(0, -1))
     } finally {
       setBekleniyor(false)
+    }
+  }
+
+  const dilekceOlustur = async () => {
+    if (bekleniyor || !aktifSession) return
+    const tur = dilekceOzelTur.trim() || dilekceSecim
+    setDilekceModal(false)
+    setDilekceOzelTur("")
+    const simdi = new Date().toISOString()
+    setMesajlar(m => [...m, { rol: 'user', icerik: `[Dilekçe oluşturuluyor — ${tur}]`, tarih: simdi }])
+    setBekleniyor(true)
+    setBekMesaj(dilekceIctihat
+      ? `İçtihat araştırılıyor → ${tur} dilekçesi yazılıyor (2–4 dk sürebilir)...`
+      : `${tur} dilekçesi yazılıyor...`)
+    try {
+      const { xml, dilekce_turu } = await api.dilekce(dava.id, tur, dilekceEk, aktifSession.id, dilekceIctihat)
+      setMesajlar(m => [...m, {
+        rol: 'assistant',
+        icerik: `**${dilekce_turu}** dilekçesi oluşturuldu. Sağ panelden önizleyip düzenleyebilirsiniz.`,
+        tarih: new Date().toISOString(),
+      }])
+      onDilekceOnizleme?.({ xml, dilekce_turu })
+    } catch (err) {
+      onToast(`Dilekçe hatası: ${err.message}`, 'err')
+      setMesajlar(m => m.slice(0, -1))
+    } finally {
+      setBekleniyor(false)
+      setDilekceEk("")
     }
   }
 
@@ -186,7 +329,78 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
         <button className="chip" onClick={() => hizliEylem('ozet')}>📝 Dava Özeti</button>
         <button className="chip" onClick={() => hizliEylem('risk')}>⚠️ Risk Analizi</button>
         <button className="chip" onClick={() => hizliEylem('ictihat')}>⚖️ İçtihat Araştır</button>
+        <button className="chip" onClick={() => hizliEylem('belgeler')}>🧾 Belge Analizi</button>
+        <button className="chip" onClick={() => hizliEylem('kronoloji')}>🗓️ Kronoloji</button>
+        <button className="chip chip-gold" onClick={() => setDilekceModal(true)} disabled={bekleniyor || !aktifSession}>📄 Dilekçe Oluştur</button>
       </div>
+
+      {dilekceModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDilekceModal(false)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h3>Dilekçe Oluştur</h3>
+              <button className="modal-kapat" onClick={() => setDilekceModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <label className="modal-label">Dilekçe Türü</label>
+              <select
+                className="modal-select"
+                value={dilekceSecim}
+                onChange={e => { setDilekceSecim(e.target.value); setDilekceOzelTur("") }}
+              >
+                {DILEKCE_GRUPLARI.map(g => (
+                  <optgroup key={g.grup} label={g.grup}>
+                    {g.turler.map(t => <option key={t} value={t}>{t}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+
+              <label className="modal-label" style={{ marginTop: 14 }}>
+                Listede Yoksa Yaz
+                <span className="modal-label-sub"> — seçimi geçersiz kılar</span>
+              </label>
+              <input
+                className="modal-input"
+                type="text"
+                placeholder="örn. Yetki Belgesi, Vekaletname Bildirimi..."
+                value={dilekceOzelTur}
+                onChange={e => setDilekceOzelTur(e.target.value)}
+              />
+
+              <label className="modal-label" style={{ marginTop: 14 }}>
+                Ek Talimat
+                <span className="modal-label-sub"> — Gemini'ye özel yönlendirme</span>
+              </label>
+              <textarea
+                className="modal-textarea"
+                placeholder={`Dilekçeye özellikle eklemesini / vurgulamasını istediğiniz şeyleri yazın.\nörn: "Manevi tazminat talebini öne çıkar", "Faiz başlangıç tarihini kaza tarihinden hesapla", "Karşı vekalet ücreti talep et"`}
+                value={dilekceEk}
+                onChange={e => setDilekceEk(e.target.value)}
+                rows={3}
+              />
+
+              <label className="modal-check" style={{ marginTop: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={dilekceIctihat}
+                  onChange={e => setDilekceIctihat(e.target.checked)}
+                />
+                <span>Yargı MCP ile içtihat araştırıp dilekçeye ekle</span>
+              </label>
+
+              <div className="modal-hint">
+                <strong style={{color:'var(--gold)'}}>Hızlı mod:</strong> Dava dosyasından doğrudan dilekçe yazar.<br/>
+                <strong style={{color:'var(--gold)'}}>İçtihatlı mod:</strong> Önce kısa hukuki özet çıkarır, Yargıtay/Danıştay kararları arar, sonra dilekçeyi yazar.<br/>
+                <span style={{color:'var(--muted)'}}>İçtihatlı mod 2–4 dakika sürebilir.</span>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn ghost sm" onClick={() => setDilekceModal(false)}>İptal</button>
+              <button className="btn sm gold" onClick={dilekceOlustur}>Oluştur ve Önizle</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <FileStrip davaId={dava.id} dosyalar={dosyalar} onYenile={yukleDosyalar} onToast={onToast} />
 
@@ -236,7 +450,7 @@ export default function ChatPanel({ dava, onIctihatToggle, onToast }) {
         />
         <div className="composer-actions">
           <span className="composer-hint">
-            {dosyalar.length > 0 ? `${dosyalar.filter(d => d.baglamda).length} / ${dosyalar.length} dosya bağlamda` : 'Dosya yüklemediniz — yanıtlar sınırlı olacak'}
+            {dosyalar.length === 0 ? 'Dosya yüklemediniz — yanıtlar sınırlı olacak' : ''}
           </span>
           <button className="btn sm" onClick={gonder} disabled={bekleniyor || !taslak.trim() || !aktifSession}>
             Gönder

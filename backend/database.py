@@ -185,6 +185,21 @@ def dosyalari_listele(dava_id: str) -> list:
     return [dict(r) for r in rows]
 
 
+def dosyalari_detayli_listele(dava_id: str) -> list:
+    with baglan() as c:
+        rows = c.execute(
+            "SELECT id, dosya_adi, format, meta, metin, yukleme_tarihi, baglamda FROM dosyalar "
+            "WHERE dava_id=? ORDER BY yukleme_tarihi DESC",
+            (dava_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def dosya_meta_guncelle(dosya_id: int, meta: dict):
+    with baglan() as c:
+        c.execute("UPDATE dosyalar SET meta=? WHERE id=?", (json.dumps(meta, ensure_ascii=False), dosya_id))
+
+
 def dosyalari_metin_birlestir(dava_id: str) -> str:
     """Sadece baglamda=1 olan dosyaların metinlerini birleştirir."""
     with baglan() as c:

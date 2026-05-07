@@ -10,3 +10,14 @@ dist/
 .DS_Store
 .vscode/
 .claude/
+
+# Yerel test/karşılaştırma artıkları
+_udf_compare/
+extracted_content.xml
+test_gem.py
+package-lock.json
+
+# Müvekkil/dava dosyaları repo'ya alınmaz
+*.udf
+*.UDF
+data/

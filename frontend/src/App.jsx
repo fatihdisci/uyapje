@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar.jsx'
 import ChatPanel from './components/ChatPanel.jsx'
 import IctihatPanel from './components/IctihatPanel.jsx'
+import DilekcePreview from './components/DilekcePreview.jsx'
 import { api } from './api.js'
 
 export default function App() {
@@ -10,6 +11,7 @@ export default function App() {
   const [yarinki, setYarinki] = useState([])
   const [sistem, setSistem] = useState(null)
   const [ictihatAcik, setIctihatAcik] = useState(false)
+  const [dilekceVeri, setDilekceVeri] = useState(null) // { xml, dilekce_turu }
   const [toastlar, setToastlar] = useState([])
   const ilkYuklemeRef = useRef(true)
 
@@ -93,8 +95,11 @@ export default function App() {
     }
   }
 
+  // Layout sınıfı belirle
+  const sagPanel = dilekceVeri ? 'with-dilekce' : (ictihatAcik && aktifDava ? 'with-ictihat' : '')
+
   return (
-    <div className={`app ${ictihatAcik && aktifDava ? 'with-ictihat' : ''}`}>
+    <div className={`app ${sagPanel}`}>
       <Sidebar
         davalar={davalar}
         aktifDava={aktifDava}
@@ -111,6 +116,7 @@ export default function App() {
           dava={aktifDava}
           onIctihatToggle={() => setIctihatAcik(v => !v)}
           onToast={toast}
+          onDilekceOnizleme={(veri) => { setDilekceVeri(veri); setIctihatAcik(false) }}
         />
       ) : (
         <main className="main">
@@ -123,7 +129,17 @@ export default function App() {
         </main>
       )}
 
-      {ictihatAcik && aktifDava && (
+      {dilekceVeri && aktifDava && (
+        <DilekcePreview
+          davaId={aktifDava.id}
+          xmlStr={dilekceVeri.xml}
+          dilekceTuru={dilekceVeri.dilekce_turu}
+          onKapat={() => setDilekceVeri(null)}
+          onToast={toast}
+        />
+      )}
+
+      {ictihatAcik && aktifDava && !dilekceVeri && (
         <IctihatPanel dava={aktifDava} onKapat={() => setIctihatAcik(false)} onToast={toast} />
       )}
 
@@ -135,3 +151,4 @@ export default function App() {
     </div>
   )
 }
+

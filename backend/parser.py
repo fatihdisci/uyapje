@@ -3,6 +3,7 @@ import os
 import re
 import tempfile
 import zipfile
+from xml.etree import ElementTree as ET
 
 import pdfplumber
 import pytesseract
@@ -41,17 +42,84 @@ def tiff_parse(yol: str) -> dict:
     return {"metin": "\n\n".join(parcalar), "meta": {"frame": len(parcalar)}}
 
 
+def _xml_duz_metin(xml: str) -> str:
+    """UYAP/HVL content.xml içinden okunabilir düz metin çıkarır."""
+    try:
+        root = ET.fromstring(xml.encode('utf-8'))
+        content = root.find('.//content')
+        if content is not None and content.text:
+            return content.text.strip()
+    except Exception:
+        pass
+
+    # Bazı UDF/XML dosyaları namespace/bozuk karakter yüzünden parse edilemeyebilir.
+    m = re.search(r'<content[^>]*><!\[CDATA\[([\s\S]*?)\]\]></content>', xml, re.I)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r'<content[^>]*>([\s\S]*?)</content>', xml, re.I)
+    if m:
+        return re.sub(r'<[^>]+>', ' ', m.group(1)).strip()
+
+    try:
+        parsed = xmltodict.parse(xml)
+        return str(parsed)[:10000]
+    except Exception:
+        return re.sub(r'<[^>]+>', ' ', xml)[:10000]
+
+
+def _udf_cli_metin(yol: str) -> str:
+    """udf-cli udf2md ile UDF'yi formatlı Markdown'a çevirir. Yoksa boş döner."""
+    import shutil as _sh
+    import subprocess as _sp
+    cli = _sh.which('udf-cli') or _sh.which('udf-cli.cmd')
+    if not cli:
+        return ''
+    try:
+        proc = _sp.run(
+            [cli, 'udf2md', yol],
+            capture_output=True,
+            timeout=60,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            return proc.stdout.decode('utf-8', errors='replace').strip()
+    except Exception:
+        pass
+    return ''
+
+
 def udf_parse(yol: str) -> dict:
+    # Önce udf-cli ile dene — formatı koruyarak Markdown çıkarır.
+    md = _udf_cli_metin(yol)
+    if md:
+        # UDF içinde gömülü PDF varsa onları da ekle (udf-cli sadece content.xml'i okur).
+        ekler = []
+        try:
+            with zipfile.ZipFile(yol, 'r') as z:
+                for isim in z.namelist():
+                    if isim.lower().endswith('.pdf'):
+                        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+                            tmp.write(z.read(isim))
+                            tmp_yol = tmp.name
+                        try:
+                            ekler.append(f"[UDF>{isim}]\n{pdf_parse(tmp_yol)['metin']}")
+                        finally:
+                            os.unlink(tmp_yol)
+        except zipfile.BadZipFile:
+            pass
+        gov = md if not ekler else md + "\n\n" + "\n\n".join(ekler)
+        return {"metin": gov, "meta": {"kaynak": "udf", "yontem": "udf-cli"}}
+
+    # Fallback: ham CDATA okuyucu (udf-cli kurulu değilse).
     parcalar = []
     with zipfile.ZipFile(yol, 'r') as z:
         for isim in z.namelist():
-            if isim.endswith('.xml'):
+            lower = isim.lower()
+            if lower.endswith('.xml'):
                 xml = z.read(isim).decode('utf-8', errors='replace')
-                try:
-                    parcalar.append(f"[XML:{isim}]\n{str(xmltodict.parse(xml))[:5000]}")
-                except Exception:
-                    parcalar.append(f"[XML ham:{isim}]\n{xml[:5000]}")
-            elif isim.endswith('.pdf'):
+                metin = _xml_duz_metin(xml)
+                if metin:
+                    parcalar.append(f"[UDF>{isim}]\n{metin}")
+            elif lower.endswith('.pdf'):
                 with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
                     tmp.write(z.read(isim))
                     tmp_yol = tmp.name
@@ -59,7 +127,7 @@ def udf_parse(yol: str) -> dict:
                     parcalar.append(f"[UDF>{isim}]\n{pdf_parse(tmp_yol)['metin']}")
                 finally:
                     os.unlink(tmp_yol)
-    return {"metin": "\n\n".join(parcalar), "meta": {"kaynak": "udf"}}
+    return {"metin": "\n\n".join(parcalar), "meta": {"kaynak": "udf", "yontem": "fallback"}}
 
 
 def zip_parse(yol: str) -> dict:
